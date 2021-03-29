@@ -89,7 +89,7 @@ namespace dd_biot
     {
     public:
         MixedBiotProblemDD(const unsigned int degree, const BiotParameters& bprm, const unsigned int mortar_flag = 0,
-                           const unsigned int mortar_degree = 0, unsigned int split_flag=0);
+                           const unsigned int mortar_degree = 0, unsigned int split_flag=0, unsigned int ic_constr_flag=0 );
 
         void run(const unsigned int refine, const std::vector <std::vector<unsigned int>> &reps, double tol,
                  unsigned int maxiter, unsigned int quad_degree = 11);
@@ -125,6 +125,7 @@ namespace dd_biot
         void solve_star_darcy();
 
         void solve_timestep(unsigned int maxiter);
+        void Find_IC(unsigned int maxiter);
 
         void compute_multiscale_basis();
         void local_cg(const unsigned int maxiter,  unsigned int split_order_flag=0); //split_order_flag=0 is Elasticity part, 1 is Darcy part
@@ -175,6 +176,7 @@ namespace dd_biot
         const unsigned int mortar_degree;
         const unsigned int mortar_flag;
         const unsigned int split_flag; //monolithic: 0, drained split:1, fixed stress: 2
+        const unsigned int ic_constr_flag; //true if needs to construct initial condition.
         unsigned int cg_iteration;
         unsigned int max_cg_iteration;
         unsigned int max_cg_iteration_darcy; //for Darcy CG in split
@@ -255,6 +257,7 @@ namespace dd_biot
         BlockVector<double> system_rhs_star_darcy;
 
         BlockVector<double> interface_fe_function;
+        BlockVector<double> interface_fe_function_old;
 
         std::vector<std::vector<double>> lambda_guess;
         std::vector<std::vector<double>> lambda_guess_elast;

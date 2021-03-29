@@ -58,7 +58,8 @@ namespace dd_biot
                                                  const BiotParameters &bprm,
                                                  const unsigned int mortar_flag,
                                                  const unsigned int mortar_degree,
-												 unsigned int split_flag)
+												 unsigned int split_flag,
+												 unsigned int ic_constr_flag)
             :
             mpi_communicator (MPI_COMM_WORLD),
             P_coarse2fine (false),
@@ -74,6 +75,7 @@ namespace dd_biot
 			max_cg_iteration_darcy(0),
             qdegree(11),
 			split_flag(split_flag),
+			ic_constr_flag(ic_constr_flag),
             fe (FE_BDM<dim>(degree), dim,
                 FE_DGQ<dim>(degree-1), dim,
                 FE_DGQ<dim>(degree-1), 0.5*dim*(dim-1),
@@ -145,9 +147,10 @@ namespace dd_biot
         	system_matrix.clear();
         else if(split_flag!=0)
         {
-        	system_matrix_elast.clear();
+//        	system_matrix_elast.clear();
         	system_matrix_darcy.clear();
         }
+        system_matrix_elast.clear();
 
         //double lower_left, upper_right;
         //const unsigned int n_processes = Utilities::MPI::n_mpi_processes(mpi_communicator);
@@ -169,10 +172,12 @@ namespace dd_biot
         dof_handler.distribute_dofs(fe);
         DoFRenumbering::component_wise (dof_handler);
 
+        dof_handler_elast.distribute_dofs(fe_elast);
+        DoFRenumbering::component_wise (dof_handler_elast);
 
         if(split_flag!=0){
-        	dof_handler_elast.distribute_dofs(fe_elast);
-        	DoFRenumbering::component_wise (dof_handler_elast);
+//        	dof_handler_elast.distribute_dofs(fe_elast);
+//        	DoFRenumbering::component_wise (dof_handler_elast);
         	dof_handler_darcy.distribute_dofs(fe_darcy);
         	DoFRenumbering::component_wise (dof_handler_darcy);
         }
@@ -337,56 +342,56 @@ namespace dd_biot
 			            solution_star_mortar.collect_sizes ();
 			        }
         }
-        else if(split_flag!=0){
-        	{ //Elasticity part
-				BlockDynamicSparsityPattern dsp(3, 3);
-				dsp.block(0, 0).reinit(n_s, n_s);
-				dsp.block(0, 1).reinit(n_s, n_u);
-				dsp.block(0, 2).reinit(n_s, n_g);
-				dsp.block(1, 0).reinit(n_u, n_s);
-				dsp.block(1, 1).reinit(n_u, n_u);
-				dsp.block(1, 2).reinit(n_u, n_g);
-				dsp.block(2, 0).reinit(n_g, n_s);
-				dsp.block(2, 1).reinit(n_g, n_u);
-				dsp.block(2, 2).reinit(n_g, n_g);
-				dsp.collect_sizes();
-				DoFTools::make_sparsity_pattern(dof_handler_elast, dsp);
 
-				// Initialize system matrix
-				sparsity_pattern_elast.copy_from(dsp);
-				system_matrix_elast.reinit(sparsity_pattern_elast);
+        { //Elasticity part
+        				BlockDynamicSparsityPattern dsp(3, 3);
+        				dsp.block(0, 0).reinit(n_s, n_s);
+        				dsp.block(0, 1).reinit(n_s, n_u);
+        				dsp.block(0, 2).reinit(n_s, n_g);
+        				dsp.block(1, 0).reinit(n_u, n_s);
+        				dsp.block(1, 1).reinit(n_u, n_u);
+        				dsp.block(1, 2).reinit(n_u, n_g);
+        				dsp.block(2, 0).reinit(n_g, n_s);
+        				dsp.block(2, 1).reinit(n_g, n_u);
+        				dsp.block(2, 2).reinit(n_g, n_g);
+        				dsp.collect_sizes();
+        				DoFTools::make_sparsity_pattern(dof_handler_elast, dsp);
 
-				// Reinit solution and RHS vectors
-				solution_bar_elast.reinit(3);
-				solution_bar_elast.block(0).reinit(n_s);
-				solution_bar_elast.block(1).reinit(n_u);
-				solution_bar_elast.block(2).reinit(n_g);
-				solution_bar_elast.collect_sizes();
-				solution_bar_elast = 0;
+        				// Initialize system matrix
+        				sparsity_pattern_elast.copy_from(dsp);
+        				system_matrix_elast.reinit(sparsity_pattern_elast);
 
-				// Reinit solution and RHS vectors
-				solution_star_elast.reinit(3);
-				solution_star_elast.block(0).reinit(n_s);
-				solution_star_elast.block(1).reinit(n_u);
-				solution_star_elast.block(2).reinit(n_g);
-				solution_star_elast.collect_sizes();
-				solution_star_elast = 0;
+        				// Reinit solution and RHS vectors
+        				solution_bar_elast.reinit(3);
+        				solution_bar_elast.block(0).reinit(n_s);
+        				solution_bar_elast.block(1).reinit(n_u);
+        				solution_bar_elast.block(2).reinit(n_g);
+        				solution_bar_elast.collect_sizes();
+        				solution_bar_elast = 0;
 
-				system_rhs_bar_elast.reinit(3);
-				system_rhs_bar_elast.block(0).reinit(n_s);
-				system_rhs_bar_elast.block(1).reinit(n_u);
-				system_rhs_bar_elast.block(2).reinit(n_g);
-				system_rhs_bar_elast.collect_sizes();
-				system_rhs_bar_elast = 0;
+        				// Reinit solution and RHS vectors
+        				solution_star_elast.reinit(3);
+        				solution_star_elast.block(0).reinit(n_s);
+        				solution_star_elast.block(1).reinit(n_u);
+        				solution_star_elast.block(2).reinit(n_g);
+        				solution_star_elast.collect_sizes();
+        				solution_star_elast = 0;
 
-				system_rhs_star_elast.reinit(3);
-				system_rhs_star_elast.block(0).reinit(n_s);
-				system_rhs_star_elast.block(1).reinit(n_u);
-				system_rhs_star_elast.block(2).reinit(n_g);
-				system_rhs_star_elast.collect_sizes();
-				system_rhs_star_elast = 0;
-        	}//end of Elasticity part
-//        	pcout<<"\n reached here"<<"\n";
+        				system_rhs_bar_elast.reinit(3);
+        				system_rhs_bar_elast.block(0).reinit(n_s);
+        				system_rhs_bar_elast.block(1).reinit(n_u);
+        				system_rhs_bar_elast.block(2).reinit(n_g);
+        				system_rhs_bar_elast.collect_sizes();
+        				system_rhs_bar_elast = 0;
+
+        				system_rhs_star_elast.reinit(3);
+        				system_rhs_star_elast.block(0).reinit(n_s);
+        				system_rhs_star_elast.block(1).reinit(n_u);
+        				system_rhs_star_elast.block(2).reinit(n_g);
+        				system_rhs_star_elast.collect_sizes();
+        				system_rhs_star_elast = 0;
+                	}//end of Elasticity part
+        if(split_flag!=0){
         	{//Darcy part
         	    BlockDynamicSparsityPattern dsp(2, 2);
         	    dsp.block(0, 0).reinit (n_z, n_z);
@@ -439,8 +444,14 @@ namespace dd_biot
         solution.collect_sizes ();
         solution = 0;
         old_solution.reinit(solution);
+        intermediate_solution.reinit(solution);
+        interface_fe_function.reinit(solution);
+        if(mortar_flag)
+        {
+        	interface_fe_function_old.reinit(solution);
+        }
         if(split_flag!=0){
-        	intermediate_solution.reinit(solution);
+//        	intermediate_solution.reinit(solution);
         	if(split_flag==2){
         		older_solution.reinit(solution);
 //        		intermediate_solution_old(solution);
@@ -1861,6 +1872,11 @@ template <int dim>
           A_direct_elast.initialize(system_matrix_elast);
           pcout << "  ...factorized Elast..." << "\n";
         }
+        else if (cg_iteration ==0 && fabs(prm.time)-0.0 < 1.e-8)
+		{
+			A_direct_elast.initialize(system_matrix_elast);
+			pcout << "  ...factorized Elast for IC ..." << "\n";
+		}
 //
         A_direct_elast.vmult (solution_bar_elast, system_rhs_bar_elast);
     }
@@ -1905,6 +1921,21 @@ template <int dim>
           A_direct_darcy.vmult (solution_star_darcy, system_rhs_star_darcy);
 
       }
+
+    template<int dim>
+    void MixedBiotProblemDD<dim>::Find_IC(unsigned int maxiter)
+    {
+		pcout << "\nStarting Initial Cond: Elast CG iterations, time t=" << prm.time << "s..." << "\n";
+		//solving Elasticity part
+		intermediate_solution.block(4) = old_solution.block(4);
+		assemble_rhs_bar_elast();
+//		pcout<<"\n\nreached here 2\n\n";
+        local_cg(maxiter,0);
+//        pcout<<"\n\nreached here 3\n\n";
+    	pcout<<"\n\nCG iteration for IC Elasticity problem converges in: "<<cg_iteration<<" iterations\n\n";
+    	cg_iteration = 0;
+
+    }
 
     template<int dim>
         void MixedBiotProblemDD<dim>::solve_timestep(unsigned int maxiter)
@@ -2079,8 +2110,8 @@ template <int dim>
         multiscale_basis.resize(n_interface_dofs);
         BlockVector<double> tmp_basis (solution_bar_mortar);
 
-        interface_fe_function.reinit(solution_bar);
-
+//        interface_fe_function.reinit(solution_bar);
+        interface_fe_function = solution_bar;
         unsigned int ind = 0;
         for (unsigned int side=0; side<GeometryInfo<dim>::faces_per_cell; ++side)
             for (unsigned int i=0; i<interface_dofs[side].size(); ++i)
@@ -2263,7 +2294,8 @@ template <int dim>
 //          for(int i =0; i<solution_bar.size();i++)
 //        	  rhs_output_file<<i<<" : "<<solution_bar[i]<<"\n";
 
-          interface_fe_function.reinit(solution_bar);
+//          interface_fe_function.reinit(solution_bar);
+          interface_fe_function = solution_bar;
 
           if (mortar_flag == 1)
           {
@@ -2843,6 +2875,10 @@ template <int dim>
     	TimerOutput::Scope t(computing_timer, "Local CG ");
 
 
+      double local_cg_tolerance(tolerance * (1.e-10));
+//    	 double local_cg_tolerance(1.e-20);
+
+
       const unsigned int this_mpi =
         Utilities::MPI::this_mpi_process(mpi_communicator);
       const unsigned int n_processes =
@@ -2899,7 +2935,8 @@ template <int dim>
     	  solve_bar_elast();
       else if (split_order_flag==1)
     	  solve_bar_darcy();
-      interface_fe_function.reinit(solution);
+//      interface_fe_function.reinit(solution);
+      interface_fe_function = solution;
 
 
       double l0 = 0.0;
@@ -3112,7 +3149,7 @@ template <int dim>
 //                << " Elast iterations completed, (Elast residual = " << fabs(alpha[0])
 //                << ")..." << std::flush;
           // Exit criterion
-          if (fabs(alpha[0]) / normB < tolerance )
+          if (fabs(alpha[0]) / normB < local_cg_tolerance )
 //          if (sqrt(alpha[0]/normB<1.e-8) )
             {
               pcout << "\n  Elast CG converges in " << cg_iteration << " iterations!\n";
@@ -3126,7 +3163,7 @@ template <int dim>
 //                         << " Darcy iterations completed, (Darcy residual = " << fabs(alpha[0])
 //                         << ")..." << std::flush;
                    // Exit criterion
-                   if (fabs(alpha[0]) / normB < tolerance )
+                   if (fabs(alpha[0]) / normB < local_cg_tolerance )
 //        	  if (sqrt(alpha[0]/normB<1.e-8) )
                      {
                        pcout << "\n  Darcy CG converges in " << cg_iteration << " iterations!\n";
@@ -3448,6 +3485,10 @@ template <int dim>
 				exact_solution.set_time(prm.time);
 				std::vector<Vector<double>> exact_values(n_face_q_points, Vector<double>(dim*dim + dim + 0.5*dim*(dim-1)+ dim + 1));
 
+				ExactSolution<dim> initial_solution;
+				initial_solution.set_time(0.0);
+				std::vector<Vector<double>> initial_values(n_face_q_points, Vector<double>(dim*dim + dim + 0.5*dim*(dim-1)+ dim + 1));
+
 
                 for (unsigned int d=0; d<dim; ++d)
                 {
@@ -3482,6 +3523,9 @@ template <int dim>
                             exact_solution.vector_value_list(fe_face_values.get_quadrature_points(),
                             									exact_values);
 
+                            initial_solution.vector_value_list(fe_face_values.get_quadrature_points(),
+                                                        		initial_values);
+
                             for (unsigned int d_i=0; d_i<dim; ++d_i)
                                 fe_face_values[stresses[d_i]].get_function_values (interface_fe_function, interface_values[d_i]);
 
@@ -3500,6 +3544,7 @@ template <int dim>
 //
                                     for (unsigned int d_i=0; d_i<dim; ++d_i)
                                         return_vector[0] += pow( exact_values[q][dim*dim + d_i] -
+                                        		initial_values[q][dim*dim + d_i] - //related to initial data lambda_u_0 = u_0 on interface
                                         		(interface_values[d_i][q] * get_normal_direction(cell->face(face_n)->boundary_id()-1) *
                                                 fe_face_values.normal_vector(q)), 2 )
                                                 *fe_face_values.JxW(q);
@@ -3645,10 +3690,21 @@ template <int dim>
                                          &rotation_mask);
       const double r_l2_norm = cellwise_norms.norm_sqr();
 
+//      ZeroFunction<dim> zero_fun(10);
+//      VectorTools::integrate_difference (dof_handler, solution, zero_fun,
+//                                              cellwise_norms, quadrature,
+//                                              VectorTools::L2_norm,
+//                                              &rotation_mask);
+//           const double comp_l2_norm = cellwise_norms.norm_sqr();
+
       err.l2_l2_errors[4] += r_l2_error;
       err.l2_l2_norms[4] += r_l2_norm;
+//      pcout<<"rotation error is: "<<r_l2_error<<std::endl;
+//      pcout<<"rotation true norm is: "<<r_l2_norm<<std::endl;
+//      pcout<<"rotation comp_sol norm is:"<<comp_l2_norm<<std::endl;
       //finding the L_infty norm in time
       err.linf_l2_errors[4] = std::max(err.linf_l2_errors[4], sqrt(r_l2_error)/sqrt(r_l2_norm));
+//      err.linf_l2_errors[4] = std::max(err.linf_l2_errors[4], sqrt(r_l2_error));
 
       // Displacement error and norm
       VectorTools::integrate_difference (dof_handler, solution, exact_solution,
@@ -4158,8 +4214,9 @@ template <int dim>
             {
                 cg_iteration = 0;
                 interface_dofs.clear();
+                interface_dofs_elast.clear();
                 if(split_flag!=0){
-    				interface_dofs_elast.clear();
+//    				interface_dofs_elast.clear();
     				interface_dofs_darcy.clear();
                 }
 
@@ -4180,6 +4237,7 @@ template <int dim>
                     else
                     {
                         GridGenerator::subdivided_hyper_rectangle(triangulation, reps[0], p1, p2);
+                        pcout << "Subdomain mesh has " << triangulation.n_active_cells() << " cells" << std::endl;
                         if (this_mpi == 0 || this_mpi == 3)
                           GridTools::distort_random (0.1*(1+this_mpi), triangulation, true);
                     }
@@ -4211,11 +4269,16 @@ template <int dim>
     //            pcout<<"\n \n grid diameter is : "<<GridTools::minimal_cell_diameter(triangulation)<<"\n \n ";
                 pcout << "Making grid and DOFs...\n";
                 make_grid_and_dofs();
+
                 lambda_guess.resize(GeometryInfo<dim>::faces_per_cell);
                 Alambda_guess.resize(GeometryInfo<dim>::faces_per_cell);
-                if(split_flag!=0){
+
                 lambda_guess_elast.resize(GeometryInfo<dim>::faces_per_cell);
-                Alambda_guess_elast.resize(GeometryInfo<dim>::faces_per_cell);
+				Alambda_guess_elast.resize(GeometryInfo<dim>::faces_per_cell);
+
+                if(split_flag!=0){
+//                lambda_guess_elast.resize(GeometryInfo<dim>::faces_per_cell);
+//                Alambda_guess_elast.resize(GeometryInfo<dim>::faces_per_cell);
 
                 lambda_guess_darcy.resize(GeometryInfo<dim>::faces_per_cell);
                 Alambda_guess_darcy.resize(GeometryInfo<dim>::faces_per_cell);
@@ -4235,7 +4298,23 @@ template <int dim>
                                         ic,
                                         old_solution);
 
-                  solution = old_solution;
+                  if (ic_constr_flag) //enable for initial data construction
+                  {
+
+                	  assemble_system_elast();
+					  get_interface_dofs_elast();
+					  Find_IC(maxiter);
+					  solution.block(4) = old_solution.block(4);
+                      old_solution = solution;
+					  interface_fe_function_old = interface_fe_function;
+                  }
+                  else //no initial data construction needed
+                  {
+                	  solution = old_solution;
+                	  interface_fe_function_old = 0;
+                  }
+
+
                   output_results(cycle,refine);
                   if(split_flag==2)
                 	  older_solution=old_solution;
@@ -4280,20 +4359,22 @@ template <int dim>
 
                   if(split_flag==2)
                 	  older_solution=old_solution;
+//                  pcout<<"\n\nreached here 1\n\n";
                   if (!split_flag)
                   {
-    //            	  for (unsigned int k=0; k<solution.block(1).size(); k++)
-    //            	  {
-    //            		  solution.block(1)[k] = old_solution.block(1)[k] + prm.time_step*solution.block(1)[k];
-    //            	  }
-    //            	  for (unsigned int k=0; k<solution.block(2).size(); k++)
-    //				  {
-    //					  solution.block(2)[k] = old_solution.block(2)[k] + prm.time_step*solution.block(2)[k];
-    //				  }
                 	  solution.block(1).sadd(prm.time_step, 1.0, old_solution.block(1));  // = old_solution.block(1) + solution.block(1);
-    //            	  solution.block(2).sadd(prm.time_step, 1.0, old_solution.block(2));
+                	  solution.block(2).sadd(prm.time_step, 1.0, old_solution.block(2));
+                	  if(mortar_flag)
+                	  {
+                		  interface_fe_function.block(0).sadd(prm.time_step, 1.0, interface_fe_function_old.block(0));
+                	  }
+
                   }
                   old_solution = solution;
+                  if(mortar_flag)
+                  {
+                	  interface_fe_function_old.block(0) = interface_fe_function.block(0);
+                  }
                   compute_errors(cycle);
                   output_results (cycle, refine);
                   max_cg_iteration=0;

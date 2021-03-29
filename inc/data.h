@@ -541,7 +541,7 @@ namespace dd_biot
               values(3) = -exp(t)*(cos(y*3.141592653589793)*sin(x*3.141592653589793)+1.0E1)+lmbda*(exp(t)*(x*2.0+(x*x)*(y*y*y*y)*3.0+cos(y-1.0)*cos((x-1.0)*(y-1.0))*(y-1.0))-exp(t)*(y*-2.0+pow(x-1.0,4.0)*pow(y-1.0,2.0)*3.0+x*sin(x*y)*sin(x)+2.0))-mu*exp(t)*(y*-2.0+pow(x-1.0,4.0)*pow(y-1.0,2.0)*3.0+x*sin(x*y)*sin(x)+2.0)*2.0;
               values(4) = exp(t)*((x*x*x)*(y*y*y*y)+cos(y-1.0)*sin((x-1.0)*(y-1.0))+x*x);
               values(5) = exp(t)*(pow(y-1.0,2.0)-pow(x-1.0,4.0)*pow(y-1.0,3.0)+cos(x*y)*sin(x));
-              values(6) = 0;
+              values(6) = exp(t)*((x*x*x)*(y*y*y)*4.0-sin(y-1.0)*sin((x-1.0)*(y-1.0))+cos(y-1.0)*cos((x-1.0)*(y-1.0))*(x-1.0))*(1.0/2.0)+exp(t)*(pow(x-1.0,3.0)*pow(y-1.0,3.0)*4.0-cos(x*y)*cos(x)+y*sin(x*y)*sin(x))*(1.0/2.0);
               values(7) = 0;
               values(8) = 0;
               values(9) = (cos(y*M_PI)*sin(x*M_PI)+1.0E1);
