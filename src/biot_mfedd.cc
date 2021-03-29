@@ -1966,7 +1966,7 @@ template <int dim>
 
     			system_rhs_bar = 0;
     			system_rhs_star = 0;
-    			  cg_iteration = 0;
+    			cg_iteration = 0;
     		  }
         	}
         	else if(split_flag==1) //drained split: solving elasticity first with pressure from previous step
@@ -2101,13 +2101,13 @@ template <int dim>
                                           update_values    | update_normal_vectors |
                                           update_quadrature_points  | update_JxW_values);
 
-        std::vector<size_t> block_sizes {solution_bar_mortar.block(0).size(), solution_bar_mortar.block(1).size()};
+//        std::vector<size_t> block_sizes {solution_bar_mortar.block(0).size(), solution_bar_mortar.block(1).size()};
         long n_interface_dofs = 0;
 
         for (auto vec : interface_dofs)
             for (auto el : vec)
                 n_interface_dofs += 1;
-
+        n_mortar_dofs = n_interface_dofs;
         multiscale_basis.resize(n_interface_dofs);
         BlockVector<double> tmp_basis (solution_bar_mortar);
 
@@ -3912,6 +3912,10 @@ template <int dim>
         	convergence_table.add_value("# CG_Elast",max_cg_iteration);
         	convergence_table.add_value("# CG_Darcy",max_cg_iteration_darcy);
         }
+        if(mortar_flag == 2)
+        {
+        	convergence_table.add_value("# Solves", n_mortar_dofs);
+        }
 
         convergence_table.add_value("Stress,L8-L2", recv_buf_num[7]);
         convergence_table.add_value("DivStress,L8-L2", recv_buf_num[3]);
@@ -4096,6 +4100,10 @@ template <int dim>
         	convergence_table.set_tex_caption("# CG_Elast", "\\# cg_Elast");
         	convergence_table.set_tex_caption("# CG_Darcy", "\\# cg_Darcy");
         }
+        if (mortar_flag == 2)
+        {
+        	convergence_table.set_tex_caption("# Solves", "\\# Basis-Solves");
+        }
 
         convergence_table.set_tex_caption("Velocity,L8-L2", "$ \\|z - z_h\\|_{L^{\\infty}(L^2)} $");
         convergence_table.set_tex_caption("DivVelocity,L8-L2", "$ \\|\\nabla\\cdot(z - z_h)\\|_{L^{\\infty}(L^2)} $");
@@ -4122,7 +4130,10 @@ template <int dim>
         	convergence_table.evaluate_convergence_rates("# CG_Elast", ConvergenceTable::reduction_rate_log2);
         	convergence_table.evaluate_convergence_rates("# CG_Darcy", ConvergenceTable::reduction_rate_log2);
         }
-
+//        if(mortar_flag == 2)
+//        {
+//        	convergence_table.evaluate_convergence_rates("# Solves", ConvergenceTable::reduction_rate_log2);
+//        }
         convergence_table.evaluate_convergence_rates("Velocity,L8-L2", ConvergenceTable::reduction_rate_log2);
         convergence_table.evaluate_convergence_rates("DivVelocity,L8-L2", ConvergenceTable::reduction_rate_log2);
 //        convergence_table.evaluate_convergence_rates("Velocity,L2-Hdiv", ConvergenceTable::reduction_rate_log2);
