@@ -30,10 +30,10 @@ int main (int argc, char *argv[])
         mesh_m2d[4] = {1,1};
         double c0=1;
         double alpha=1;
-        int num_cycle=5;
+        int num_cycle=3;
         int max_itr=500;
         double tolerence = 1.e-6;
-        BiotParameters bparam (0.0001,5,c0,alpha);
+        BiotParameters bparam (0.001,1,c0,alpha);
 
 //        //BiotDD without mortar
 //        MixedBiotProblemDD<2> drained_split(1, bparam,0,0,1);
@@ -45,7 +45,7 @@ int main (int argc, char *argv[])
 //        monolithic.run (num_cycle, mesh_m2d, tolerence, max_itr);
 
      //BiotDD with mortar
-        MixedBiotProblemDD<2> lin_mortar(1,bparam,1,1,0);
+        MixedBiotProblemDD<2> lin_mortar(1,bparam,2,1,0,0);
 //        MixedBiotProblemDD<2> quad_mortar(1,bparam,1,2,0);
 //        MixedBiotProblemDD<2> cubic_mortar(1,bparam,1,3,0);
 

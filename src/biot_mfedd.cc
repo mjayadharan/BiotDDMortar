@@ -449,6 +449,7 @@ namespace dd_biot
         if(mortar_flag)
         {
         	interface_fe_function_old.reinit(solution);
+        	interface_fe_function_mortar.reinit(solution_bar_mortar);
         }
         if(split_flag!=0){
 //        	intermediate_solution.reinit(solution);
@@ -2111,7 +2112,7 @@ template <int dim>
         BlockVector<double> tmp_basis (solution_bar_mortar);
 
 //        interface_fe_function.reinit(solution_bar);
-        interface_fe_function = solution_bar;
+//        interface_fe_function = solution_bar;
         unsigned int ind = 0;
         for (unsigned int side=0; side<GeometryInfo<dim>::faces_per_cell; ++side)
             for (unsigned int i=0; i<interface_dofs[side].size(); ++i)
@@ -2299,13 +2300,15 @@ template <int dim>
 
           if (mortar_flag == 1)
           {
-              interface_fe_function_mortar.reinit(solution_bar_mortar);
+//              interface_fe_function_mortar.reinit(solution_bar_mortar);
+        	  interface_fe_function_mortar=0;
               project_mortar(P_fine2coarse, dof_handler, solution_bar, quad, constraints, neighbors, dof_handler_mortar, solution_bar_mortar);
 //              project_mortar(P_fine2coarse, dof_handler, solution_bar, quad, constraints, neighbors, dof_handler, solution_bar_mortar);
           }
           else if (mortar_flag == 2)
           {
-              interface_fe_function_mortar.reinit(solution_bar_mortar);
+//              interface_fe_function_mortar.reinit(solution_bar_mortar);
+        	  interface_fe_function_mortar=0;
               solution_star_mortar = 0;
 
               // The computation of multiscale basis must necessarilly be after solve_bar() call,
