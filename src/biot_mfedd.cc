@@ -449,6 +449,7 @@ namespace dd_biot
         if(mortar_flag)
         {
         	interface_fe_function_old.reinit(solution);
+        	interface_fe_function_mortar.reinit(solution_bar_mortar);
         }
         if(split_flag!=0){
 //        	intermediate_solution.reinit(solution);
@@ -1849,7 +1850,7 @@ template <int dim>
     {
         TimerOutput::Scope t(computing_timer, "Solve bar");
 
-        if (cg_iteration == 0 && prm.time == prm.time_step)
+        if (cg_iteration == 0 && prm.time == prm.time_step && mortar_flag != 2)
         {
 
 //          A_direct.initialize(system_matrix);
@@ -1965,7 +1966,7 @@ template <int dim>
 
     			system_rhs_bar = 0;
     			system_rhs_star = 0;
-    			  cg_iteration = 0;
+    			cg_iteration = 0;
     		  }
         	}
         	else if(split_flag==1) //drained split: solving elasticity first with pressure from previous step
@@ -2100,18 +2101,18 @@ template <int dim>
                                           update_values    | update_normal_vectors |
                                           update_quadrature_points  | update_JxW_values);
 
-        std::vector<size_t> block_sizes {solution_bar_mortar.block(0).size(), solution_bar_mortar.block(1).size()};
+//        std::vector<size_t> block_sizes {solution_bar_mortar.block(0).size(), solution_bar_mortar.block(1).size()};
         long n_interface_dofs = 0;
 
         for (auto vec : interface_dofs)
             for (auto el : vec)
                 n_interface_dofs += 1;
-
+        n_mortar_dofs = n_interface_dofs;
         multiscale_basis.resize(n_interface_dofs);
         BlockVector<double> tmp_basis (solution_bar_mortar);
 
 //        interface_fe_function.reinit(solution_bar);
-        interface_fe_function = solution_bar;
+//        interface_fe_function = solution_bar;
         unsigned int ind = 0;
         for (unsigned int side=0; side<GeometryInfo<dim>::faces_per_cell; ++side)
             for (unsigned int i=0; i<interface_dofs[side].size(); ++i)
@@ -2299,20 +2300,22 @@ template <int dim>
 
           if (mortar_flag == 1)
           {
-              interface_fe_function_mortar.reinit(solution_bar_mortar);
+//              interface_fe_function_mortar.reinit(solution_bar_mortar);
+        	  interface_fe_function_mortar=0;
               project_mortar(P_fine2coarse, dof_handler, solution_bar, quad, constraints, neighbors, dof_handler_mortar, solution_bar_mortar);
 //              project_mortar(P_fine2coarse, dof_handler, solution_bar, quad, constraints, neighbors, dof_handler, solution_bar_mortar);
           }
           else if (mortar_flag == 2)
           {
-              interface_fe_function_mortar.reinit(solution_bar_mortar);
+//              interface_fe_function_mortar.reinit(solution_bar_mortar);
+        	  interface_fe_function_mortar=0;
               solution_star_mortar = 0;
 
               // The computation of multiscale basis must necessarilly be after solve_bar() call,
               // as in solve bar we factorize the system matrix into matrix A and clear the system matrix
               // for the sake of memory. Same for solve_star() calls, they should only appear after the solve_bar()
-              compute_multiscale_basis();
-              pcout << "Done computing multiscale basis\n";
+//              compute_multiscale_basis();
+//              pcout << "Done computing multiscale basis\n";
               project_mortar(P_fine2coarse, dof_handler, solution_bar, quad, constraints, neighbors, dof_handler_mortar, solution_bar_mortar);
 
               // Instead of solving subdomain problems we compute the response using basis
@@ -3861,7 +3864,7 @@ template <int dim>
 								   err.velocity_stress_linf_div_errors[1],
                                    err.linf_l2_errors[1],
                                    err.l2_l2_errors[2],
-                                   err.velocity_stress_l2_div_errors[1],
+                                   err.velocity_stress_l2_div_errors[0],
                                    err.linf_l2_errors[2],
                                    err.l2_l2_errors[3],
                                    err.pressure_disp_l2_midcell_errors[1],
@@ -3875,7 +3878,7 @@ template <int dim>
                                    err.pressure_disp_l2_midcell_norms[0],
                                    0,
                                    err.l2_l2_norms[2],
-                                   err.velocity_stress_l2_div_norms[1],
+                                   err.velocity_stress_l2_div_norms[0],
                                    0,
                                    err.l2_l2_norms[3],
                                    err.pressure_disp_l2_midcell_norms[1],
@@ -3909,6 +3912,10 @@ template <int dim>
         	convergence_table.add_value("# CG_Elast",max_cg_iteration);
         	convergence_table.add_value("# CG_Darcy",max_cg_iteration_darcy);
         }
+        if(mortar_flag == 2)
+        {
+        	convergence_table.add_value("# Solves", n_mortar_dofs);
+        }
 
         convergence_table.add_value("Stress,L8-L2", recv_buf_num[7]);
         convergence_table.add_value("DivStress,L8-L2", recv_buf_num[3]);
@@ -3924,7 +3931,8 @@ template <int dim>
 //        convergence_table.add_value("Velocity,L8-Hdiv", recv_buf_num[0]);
 //        convergence_table.add_value("Velocity,L2-Hdiv", recv_buf_num[1]);
         convergence_table.add_value("Velocity,L8-L2", recv_buf_num[1]);
-        convergence_table.add_value("DivVelocity,L8-L2", recv_buf_num[0]);
+//        convergence_table.add_value("DivVelocity,L8-L2", recv_buf_num[0]);
+        convergence_table.add_value("Velocity,L2-Hdiv", recv_buf_num[6]);
 
 //        convergence_table.add_value("Pressure,L2-L2", recv_buf_num[2]);
 //        convergence_table.add_value("Pressure,L2-L2mid", recv_buf_num[3]);
@@ -4057,15 +4065,15 @@ template <int dim>
       double total_time = prm.time_step * prm.num_time_steps;
       if (Utilities::MPI::this_mpi_process(mpi_communicator) == 0 && cycle == refine-1 && std::abs(prm.time-total_time)<1.0e-12){
     	  convergence_table.set_precision("Velocity,L8-L2", 2);
-    	  convergence_table.set_precision("DivVelocity,L8-L2", 2);
-//        convergence_table.set_precision("Velocity,L2-Hdiv", 3);
+//    	  convergence_table.set_precision("DivVelocity,L8-L2", 2);
+        convergence_table.set_precision("Velocity,L2-Hdiv", 2);
 //        convergence_table.set_precision("Pressure,L2-L2", 3);
 //        convergence_table.set_precision("Pressure,L2-L2mid", 3);
         convergence_table.set_precision("Pressure,L8-L2", 2);
 
         convergence_table.set_scientific("Velocity,L8-L2", true);
-        convergence_table.set_scientific("DivVelocity,L8-L2", true);
-//        convergence_table.set_scientific("Velocity,L2-Hdiv", true);
+//        convergence_table.set_scientific("DivVelocity,L8-L2", true);
+        convergence_table.set_scientific("Velocity,L2-Hdiv", true);
 //        convergence_table.set_scientific("Pressure,L2-L2", true);
 //        convergence_table.set_scientific("Pressure,L2-L2mid", true);
         convergence_table.set_scientific("Pressure,L8-L2", true);
@@ -4093,10 +4101,14 @@ template <int dim>
         	convergence_table.set_tex_caption("# CG_Elast", "\\# cg_Elast");
         	convergence_table.set_tex_caption("# CG_Darcy", "\\# cg_Darcy");
         }
+        if (mortar_flag == 2)
+        {
+        	convergence_table.set_tex_caption("# Solves", "\\# Basis-Solves");
+        }
 
         convergence_table.set_tex_caption("Velocity,L8-L2", "$ \\|z - z_h\\|_{L^{\\infty}(L^2)} $");
-        convergence_table.set_tex_caption("DivVelocity,L8-L2", "$ \\|\\nabla\\cdot(z - z_h)\\|_{L^{\\infty}(L^2)} $");
-//        convergence_table.set_tex_caption("Velocity,L2-Hdiv", "$ \\|\\nabla\\cdot(\\u - \\u_h)\\|_{L^2(L^2)} $");
+//        convergence_table.set_tex_caption("DivVelocity,L8-L2", "$ \\|\\nabla\\cdot(z - z_h)\\|_{L^{\\infty}(L^2)} $");
+        convergence_table.set_tex_caption("Velocity,L2-Hdiv", "$ \\|\\nabla\\cdot(\\u - \\u_h)\\|_{L^2(L^2)} $");
 //        convergence_table.set_tex_caption("Pressure,L2-L2", "$ \\|p - p_h\\|_{L^2(L^2)} $");
 //        convergence_table.set_tex_caption("Pressure,L2-L2mid", "$ \\|Qp - p_h\\|_{L^2(L^2)} $");
         convergence_table.set_tex_caption("Pressure,L8-L2", "$ \\|p - p_h\\|_{L^{\\infty}(L^2)} $");
@@ -4119,10 +4131,13 @@ template <int dim>
         	convergence_table.evaluate_convergence_rates("# CG_Elast", ConvergenceTable::reduction_rate_log2);
         	convergence_table.evaluate_convergence_rates("# CG_Darcy", ConvergenceTable::reduction_rate_log2);
         }
-
+//        if(mortar_flag == 2)
+//        {
+//        	convergence_table.evaluate_convergence_rates("# Solves", ConvergenceTable::reduction_rate_log2);
+//        }
         convergence_table.evaluate_convergence_rates("Velocity,L8-L2", ConvergenceTable::reduction_rate_log2);
-        convergence_table.evaluate_convergence_rates("DivVelocity,L8-L2", ConvergenceTable::reduction_rate_log2);
-//        convergence_table.evaluate_convergence_rates("Velocity,L2-Hdiv", ConvergenceTable::reduction_rate_log2);
+//        convergence_table.evaluate_convergence_rates("DivVelocity,L8-L2", ConvergenceTable::reduction_rate_log2);
+        convergence_table.evaluate_convergence_rates("Velocity,L2-Hdiv", ConvergenceTable::reduction_rate_log2);
 //        convergence_table.evaluate_convergence_rates("Pressure,L2-L2", ConvergenceTable::reduction_rate_log2);
 //        convergence_table.evaluate_convergence_rates("Pressure,L2-L2mid", ConvergenceTable::reduction_rate_log2);
         convergence_table.evaluate_convergence_rates("Pressure,L8-L2", ConvergenceTable::reduction_rate_log2);
@@ -4351,6 +4366,13 @@ template <int dim>
     //            	interface_dofs_file<<"\n";
     //            }
 
+                if(mortar_flag == 2)
+                {
+                    pcout << "  ...factorized..." << "\n";
+                    A_direct.initialize(system_matrix);
+                	compute_multiscale_basis();
+                	pcout << "Done computing multiscale basis\n";
+                }
                 for(unsigned int i=0; i<prm.num_time_steps; i++)
                 {
                   prm.time += prm.time_step;
