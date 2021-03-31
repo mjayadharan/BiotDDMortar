@@ -190,6 +190,7 @@ namespace dd_biot
         std::vector<unsigned int> faces_on_interface_mortar;
         std::vector <std::vector<unsigned int>> interface_dofs;
         std::vector <std::vector<unsigned int>> interface_dofs_elast;
+        std::vector <std::vector<unsigned int>> interface_dofs_elast_mortar;
         std::vector <std::vector<unsigned int>> interface_dofs_darcy;
 
 
@@ -199,7 +200,14 @@ namespace dd_biot
         unsigned long n_flux;
         unsigned long n_pressure;
         unsigned long n_Elast;
-        unsigned long n_mortar_dofs;
+
+        unsigned long n_stress_mortar;
+		unsigned long n_disp_mortar;
+		unsigned long n_rot_mortar;
+		unsigned long n_flux_mortar;
+		unsigned long n_pressure_mortar;
+		unsigned long n_Elast_mortar;
+		unsigned long n_mortar_dofs;
 
         // Subdomain coordinates (assuming logically rectangular blocks)
         Point <dim> p1;

@@ -319,11 +319,11 @@ namespace dd_biot
 			            n_z_mortar = dofs_per_component_mortar[dim*dim + dim + 0.5*dim*(dim-1)];
 			            n_p_mortar = dofs_per_component_mortar[dim*dim + dim + 0.5*dim*(dim-1) + dim];
 
-			            n_stress = n_s_mortar;
-			            n_disp = n_u_mortar;
-			            n_rot = n_g_mortar;
-			            n_flux = n_z_mortar;
-			            n_pressure = n_p_mortar;
+			            n_stress_mortar = n_s_mortar;
+			            n_disp_mortar = n_u_mortar;
+			            n_rot_mortar = n_g_mortar;
+			            n_flux_mortar = n_z_mortar;
+			            n_pressure_mortar = n_p_mortar;
 
 			            solution_bar_mortar.reinit(5);
 			            solution_bar_mortar.block(0).reinit (n_s_mortar);
@@ -1022,16 +1022,34 @@ template <int dim>
                 {
                     cell->face(face_n)->get_dof_indices (local_face_dof_indices, 0);
 
-                    for (auto el : local_face_dof_indices){
-                        if (el < n_stress){
-                            interface_dofs[cell->face(face_n)->boundary_id()-1].push_back(el);
-//                            local_counter++;
-                        }
-                        else if(el>=n_stress+n_disp+n_rot && el<n_stress+n_disp+n_rot+n_flux){
-                        	interface_dofs[cell->face(face_n)->boundary_id()-1].push_back(el);
-//                        	local_counter++;
-                        }
-
+                    for (auto el : local_face_dof_indices)
+                    {
+                    	if(mortar_flag)
+                    	{
+                    		if (el < n_stress_mortar)
+							{
+								interface_dofs[cell->face(face_n)->boundary_id()-1].push_back(el);
+	//                            local_counter++;
+							}
+							else if(el>=n_stress_mortar+n_disp_mortar+n_rot_mortar && el<n_stress_mortar+n_disp_mortar+n_rot_mortar+n_flux_mortar)
+							{
+								interface_dofs[cell->face(face_n)->boundary_id()-1].push_back(el);
+	//                        	local_counter++;
+							}
+                    	}
+                    	else
+                    	{
+                    	    if (el < n_stress)
+							{
+								interface_dofs[cell->face(face_n)->boundary_id()-1].push_back(el);
+	//                            local_counter++;
+							}
+							else if(el>=n_stress+n_disp+n_rot && el<n_stress+n_disp+n_rot+n_flux)
+							{
+								interface_dofs[cell->face(face_n)->boundary_id()-1].push_back(el);
+	//                        	local_counter++;
+							}
+                    	}
                     }
                 }
         }
@@ -1069,13 +1087,18 @@ template <int dim>
                 if (cell->at_boundary(face_n) && cell->face(face_n)->boundary_id() != 0)
                 {
                     cell->face(face_n)->get_dof_indices (local_face_dof_indices, 0);
-
-                    for (auto el : local_face_dof_indices){
-                        if (el < n_stress)
-                            interface_dofs_elast[cell->face(face_n)->boundary_id()-1].push_back(el);
-
-
-
+                    for (auto el : local_face_dof_indices)
+                    {
+                    	if(mortar_flag)
+                    	{
+                    		if (el < n_stress_mortar)
+								interface_dofs_elast[cell->face(face_n)->boundary_id()-1].push_back(el);
+                    	}
+                    	else
+                    	{
+                    		 if (el < n_stress)
+								interface_dofs_elast[cell->face(face_n)->boundary_id()-1].push_back(el);
+                    	}
                     }
                 }
         }
@@ -2370,7 +2393,7 @@ template <int dim>
 //                	}
                 	for (unsigned int i = 0; i < interface_dofs[side].size(); ++i)
 					{
-							if (interface_dofs[side][i]<n_stress)
+							if (interface_dofs[side][i]<n_stress_mortar)
 //                		if (true)
 								{
 								r[side][i] = -(get_normal_direction(side) *
@@ -2642,7 +2665,7 @@ template <int dim>
 //                        for (unsigned int i=0; i<interface_dofs[side].size(); ++i)
 //                            interface_data_send[side][i] = get_normal_direction(side) * solution_star_mortar[interface_dofs[side][i]];
                     	for (unsigned int i=0; i<interface_dofs[side].size(); ++i)
-							if (interface_dofs[side][i] < n_stress)
+							if (interface_dofs[side][i] < n_stress_mortar)
 							{
 								interface_data_send[side][i] = get_normal_direction(side) * solution_star_mortar[interface_dofs[side][i]];
 							}
@@ -2941,6 +2964,16 @@ template <int dim>
 //      interface_fe_function.reinit(solution);
       interface_fe_function = solution;
 
+      if (mortar_flag)
+	  {
+		  interface_fe_function_mortar.reinit(solution_bar_mortar);
+		  solution_bar = 0;
+		  for (unsigned int i=0; i<3; i++)
+		  {
+			  solution_bar.block(i) = solution_bar_elast.block(i);
+		  }
+		  project_mortar(P_fine2coarse, dof_handler, solution_bar, quad, constraints, neighbors, dof_handler_mortar, solution_bar_mortar);
+	  }
 
       double l0 = 0.0;
       // CG with rhs being 0 and initial guess lambda = 0
@@ -2951,7 +2984,7 @@ template <int dim>
             // Something will be here to initialize lambda correctly, right now it
             // is just zero
 //        	std::vector<double> r_receive_buffer;
-        	if(split_order_flag==0)
+        	if(split_order_flag==0) //used for ic construction
         	{
         		if (true || prm.time == prm.time_step)
         		              {
@@ -2967,7 +3000,14 @@ template <int dim>
 
 
             // Right now it is effectively solution_bar - A\lambda (0)
-              for (unsigned int i = 0; i < interface_dofs_elast[side].size(); ++i){
+            if (mortar_flag)
+			   for (unsigned int i=0;i<interface_dofs_elast[side].size();++i)
+			   {
+				   r[side][i] = get_normal_direction(side) * solution_bar_mortar[interface_dofs_elast[side][i]];
+			   }
+            else
+              for (unsigned int i = 0; i < interface_dofs_elast[side].size(); ++i)
+              {
                 r[side][i] = get_normal_direction(side) *
                                solution_bar_elast[interface_dofs_elast[side][i]] -
                              get_normal_direction(side) * solution_star_elast[interface_dofs_elast[side][i]];
@@ -3032,7 +3072,30 @@ template <int dim>
           iteration_counter++;
           interface_data = p;
 
-              for (unsigned int side = 0; side < n_faces_per_cell; ++side)
+          if (mortar_flag)
+          {
+        	  for (unsigned int side=0;side<n_faces_per_cell;++side)
+				  for (unsigned int i=0;i<interface_dofs_elast[side].size();++i)
+					  interface_fe_function_mortar[interface_dofs_elast[side][i]] = interface_data[side][i];
+
+        	  interface_fe_function = 0;
+			  project_mortar(P_coarse2fine, dof_handler_mortar,
+							 interface_fe_function_mortar,
+							 quad,
+							 constraints,
+							 neighbors,
+							 dof_handler,
+							 interface_fe_function);
+//			  interface_fe_function.block(2) = 0;
+
+			  assemble_rhs_star_elast(fe_face_values);
+			  solve_star_elast();
+			  solution_star=0;
+			  solution_star.block(0) = solution_star_elast.block(0);
+          }
+          else
+          {
+          for (unsigned int side = 0; side < n_faces_per_cell; ++side)
             	  if(split_order_flag==0){
             		  for (unsigned int i = 0; i < interface_dofs_elast[side].size(); ++i)
             			  interface_fe_function[interface_dofs_elast[side][i]] = interface_data[side][i];
@@ -3043,7 +3106,8 @@ template <int dim>
             	  }
 
 
-              if(split_order_flag==0){
+              if(split_order_flag==0)
+              {
             	  interface_fe_function.block(2) = 0;
             	  assemble_rhs_star_elast(fe_face_values);
             	  solve_star_elast();
@@ -3052,11 +3116,21 @@ template <int dim>
                        	  assemble_rhs_star_darcy(fe_face_values);
                        	  solve_star_darcy();
               }
+          }
 //              solve_star();
 
 
           cg_iteration++;
 
+          if (mortar_flag)
+			  project_mortar(P_fine2coarse,
+							 dof_handler,
+							 solution_star,
+							 quad,
+							 constraints,
+							 neighbors,
+							 dof_handler_mortar,
+							 solution_star_mortar);
 
           for (unsigned int side = 0; side < n_faces_per_cell; ++side)
             if (neighbors[side] >= 0)
@@ -3068,10 +3142,18 @@ template <int dim>
 
                 // Create vector of u\dot n to send
                 if(split_order_flag==0){
-                  for (unsigned int i = 0; i < interface_dofs_elast[side].size(); ++i)
-                    interface_data_send[side][i] =
-                      get_normal_direction(side) *
-                      solution_star_elast[interface_dofs_elast[side][i]];
+                	if (mortar_flag)
+                	{
+                		for (unsigned int i=0; i<interface_dofs_elast[side].size(); ++i)
+							interface_data_send[side][i] = get_normal_direction(side)
+														   * solution_star_mortar[interface_dofs_elast[side][i]];
+                	}
+                	else
+                	{
+                		for (unsigned int i = 0; i < interface_dofs_elast[side].size(); ++i)
+							interface_data_send[side][i] =get_normal_direction(side)
+										  	  	  	  	  * solution_star_elast[interface_dofs_elast[side][i]];
+                	}
                 }
                 else if(split_order_flag==1){
                                   for (unsigned int i = 0; i < interface_dofs_darcy[side].size(); ++i)
@@ -3131,6 +3213,7 @@ template <int dim>
           if (cg_iteration == 1){
             normB = alpha[0];
             normRold = alpha[0];
+            pcout<<"normB is:"<<normB<<std::endl;
           }
 
           normRold = alpha[0];
@@ -3148,9 +3231,9 @@ template <int dim>
                   beta_side[side] += r[side][i] * r[side][i];
               }
           if(split_order_flag==0){
-//          pcout << "\r  ..." << cg_iteration
-//                << " Elast iterations completed, (Elast residual = " << fabs(alpha[0])
-//                << ")..." << std::flush;
+          pcout << "\r  ..." << cg_iteration
+                << " Elast iterations completed, (Elast residual = " << fabs(alpha[0])
+                << ")..." << std::flush;
           // Exit criterion
           if (fabs(alpha[0]) / normB < local_cg_tolerance )
 //          if (sqrt(alpha[0]/normB<1.e-8) )
@@ -3208,16 +3291,32 @@ template <int dim>
           Ap.resize(n_faces_per_cell);
         }
 
-
           interface_data = lambda;
-          //
           if(split_order_flag==0)
           {
-			  for (unsigned int side = 0; side < n_faces_per_cell; ++side)
-				for (unsigned int i = 0; i < interface_dofs_elast[side].size(); ++i)
-				  interface_fe_function[interface_dofs_elast[side][i]] =
-					interface_data[side][i];
+              if (mortar_flag)
+				 {
+					 for (unsigned int side=0;side<n_faces_per_cell;++side)
+						 for (unsigned int i=0;i<interface_dofs_elast[side].size();++i)
+							 interface_fe_function_mortar[interface_dofs_elast[side][i]] = interface_data[side][i];
 
+					 project_mortar(P_coarse2fine,
+									dof_handler_mortar,
+									interface_fe_function_mortar,
+									quad,
+									constraints,
+									neighbors,
+									dof_handler,
+									interface_fe_function);
+					 interface_fe_function.block(2) = 0;
+				 }
+              else
+              {
+            	  for (unsigned int side = 0; side < n_faces_per_cell; ++side)
+					for (unsigned int i = 0; i < interface_dofs_elast[side].size(); ++i)
+					  interface_fe_function[interface_dofs_elast[side][i]] =
+						interface_data[side][i];
+              }
 
 		  assemble_rhs_star_elast(fe_face_values);
 		  solve_star_elast();
