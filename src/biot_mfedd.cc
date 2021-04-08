@@ -1984,8 +1984,8 @@ template <int dim>
     	//        local_cg(maxiter);
     			local_gmres (maxiter);
 
-    			if (cg_iteration > max_cg_iteration)
-    			  max_cg_iteration = cg_iteration;
+//    			if (cg_iteration > max_cg_iteration)
+    			  max_cg_iteration += cg_iteration;
 
     			system_rhs_bar = 0;
     			system_rhs_star = 0;
@@ -2029,8 +2029,8 @@ template <int dim>
     //    			local_cg_elast(maxiter);
         	        system_rhs_bar_elast=0;
         	        system_rhs_star_elast=0;
-          			if (cg_iteration > max_cg_iteration)
-          			  max_cg_iteration = cg_iteration;
+//          			if (cg_iteration > max_cg_iteration)
+          			  max_cg_iteration += cg_iteration;
           			cg_iteration = 0;
 
           			//solving Darcy part
@@ -2041,8 +2041,8 @@ template <int dim>
     //      			 local_cg_darcy(maxiter);
           			 system_rhs_bar_darcy=0;
           			 system_rhs_star_darcy=0;
-         			if (cg_iteration > max_cg_iteration_darcy)
-               			  max_cg_iteration_darcy = cg_iteration;
+//         			if (cg_iteration > max_cg_iteration_darcy)
+               			  max_cg_iteration_darcy += cg_iteration;
           			 cg_iteration=0;
 
 
@@ -2093,8 +2093,8 @@ template <int dim>
         			system_rhs_bar_darcy=0;
         			system_rhs_star_darcy=0;
         			pcout << "\nStarting Elast CG iterations, time t=" << prm.time << "s..." << "\n";
-        			if (cg_iteration > max_cg_iteration_darcy)
-        			   max_cg_iteration_darcy = cg_iteration;
+//        			if (cg_iteration > max_cg_iteration_darcy)
+        			   max_cg_iteration_darcy += cg_iteration;
         			cg_iteration=0;
 
         			//solving Elasticity part
@@ -2104,8 +2104,8 @@ template <int dim>
     //    			local_cg_elast(maxiter);
         	        system_rhs_bar_elast=0;
         	        system_rhs_star_elast=0;
-          			if (cg_iteration > max_cg_iteration)
-          			  max_cg_iteration = cg_iteration;
+//          			if (cg_iteration > max_cg_iteration)
+          			  max_cg_iteration += cg_iteration;
           			 cg_iteration=0;
 
 
@@ -2793,10 +2793,11 @@ template <int dim>
 
 
 
-
-              pcout << "\r  ..." << cg_iteration
-                    << " iterations completed, (residual = " << combined_error_iter
-                    << ")..." << std::flush;
+//
+//              pcout << "\r  ..." << cg_iteration
+//                    << " iterations completed, (residual = " << combined_error_iter
+//                    << ")..." << std::flush;
+//
               // Exit criterion
               if (combined_error_iter < tolerance)
                 {
@@ -4006,10 +4007,14 @@ template <int dim>
 
         convergence_table.add_value("cycle", cycle);
         if(split_flag==0)
-        convergence_table.add_value("# GMRES", max_cg_iteration);
+        {
+        	int average_iteration_num = max_cg_iteration/prm.num_time_steps;
+//        	pcout<<"\n\n\ngmres iterations"<<max_cg_iteration<<max_cg_iteration/prm.num_time_steps<<"\n\n\n";
+        	convergence_table.add_value("# GMRES", average_iteration_num);
+        }
         else if(split_flag!=0){
-        	convergence_table.add_value("# CG_Elast",max_cg_iteration);
-        	convergence_table.add_value("# CG_Darcy",max_cg_iteration_darcy);
+        	convergence_table.add_value("# CG_Elast",max_cg_iteration/prm.num_time_steps);
+        	convergence_table.add_value("# CG_Darcy",max_cg_iteration_darcy/prm.num_time_steps);
         }
         if(mortar_flag == 2)
         {
@@ -4066,102 +4071,108 @@ template <int dim>
         unsigned int n_processes = Utilities::MPI::n_mpi_processes(mpi_communicator);
         unsigned int this_mpi = Utilities::MPI::this_mpi_process(mpi_communicator);
 
-        /* From here disabling for longer runs:
+        double total_time = prm.time_step * prm.num_time_steps;
+
+
+        /* From here disabling for longer runs: Now outputting solution only for t=0 and t=T(final time).
          */
+        if(fabs(prm.time-total_time)<1.0e-12 || prm.time<1.0e-12)
+		{
+            std::vector<std::string> solution_names;
+            switch(dim)
+            {
+              case 2:
+                solution_names.push_back ("s11");
+                solution_names.push_back ("s12");
+                solution_names.push_back ("s21");
+                solution_names.push_back ("s22");
+                solution_names.push_back ("d1");
+                solution_names.push_back ("d2");
+                solution_names.push_back ("r");
+                solution_names.push_back ("u1");
+                solution_names.push_back ("u2");
+                solution_names.push_back ("p");
+                break;
 
-      std::vector<std::string> solution_names;
-      switch(dim)
-      {
-        case 2:
-          solution_names.push_back ("s11");
-          solution_names.push_back ("s12");
-          solution_names.push_back ("s21");
-          solution_names.push_back ("s22");
-          solution_names.push_back ("d1");
-          solution_names.push_back ("d2");
-          solution_names.push_back ("r");
-          solution_names.push_back ("u1");
-          solution_names.push_back ("u2");
-          solution_names.push_back ("p");
-          break;
+              case 3:
+                solution_names.push_back ("s11");
+                solution_names.push_back ("s12");
+                solution_names.push_back ("s13");
+                solution_names.push_back ("s21");
+                solution_names.push_back ("s22");
+                solution_names.push_back ("s23");
+                solution_names.push_back ("s31");
+                solution_names.push_back ("s32");
+                solution_names.push_back ("s33");
+                solution_names.push_back ("d1");
+                solution_names.push_back ("d2");
+                solution_names.push_back ("d3");
+                solution_names.push_back ("r1");
+                solution_names.push_back ("r2");
+                solution_names.push_back ("r3");
+                solution_names.push_back ("u1");
+                solution_names.push_back ("u2");
+                solution_names.push_back ("u3");
+                solution_names.push_back ("p");
+                break;
 
-        case 3:
-          solution_names.push_back ("s11");
-          solution_names.push_back ("s12");
-          solution_names.push_back ("s13");
-          solution_names.push_back ("s21");
-          solution_names.push_back ("s22");
-          solution_names.push_back ("s23");
-          solution_names.push_back ("s31");
-          solution_names.push_back ("s32");
-          solution_names.push_back ("s33");
-          solution_names.push_back ("d1");
-          solution_names.push_back ("d2");
-          solution_names.push_back ("d3");
-          solution_names.push_back ("r1");
-          solution_names.push_back ("r2");
-          solution_names.push_back ("r3");
-          solution_names.push_back ("u1");
-          solution_names.push_back ("u2");
-          solution_names.push_back ("u3");
-          solution_names.push_back ("p");
-          break;
+              default:
+              Assert(false, ExcNotImplemented());
+            }
 
-        default:
-        Assert(false, ExcNotImplemented());
-      }
+            // Components interpretation of the mechanics solution (vector^dim - vector - rotation)
+            std::vector<DataComponentInterpretation::DataComponentInterpretation> data_component_interpretation(dim*dim+dim, DataComponentInterpretation::component_is_part_of_vector);
+            switch (dim)
+            {
+              case 2:
+                data_component_interpretation.push_back (DataComponentInterpretation::component_is_scalar);
+                break;
 
-      // Components interpretation of the mechanics solution (vector^dim - vector - rotation)
-      std::vector<DataComponentInterpretation::DataComponentInterpretation> data_component_interpretation(dim*dim+dim, DataComponentInterpretation::component_is_part_of_vector);
-      switch (dim)
-      {
-        case 2:
-          data_component_interpretation.push_back (DataComponentInterpretation::component_is_scalar);
-          break;
+              case 3:
+                data_component_interpretation.push_back (DataComponentInterpretation::component_is_part_of_vector);
+                break;
 
-        case 3:
-          data_component_interpretation.push_back (DataComponentInterpretation::component_is_part_of_vector);
-          break;
+              default:
+              Assert(false, ExcNotImplemented());
+                break;
+            }
 
-        default:
-        Assert(false, ExcNotImplemented());
-          break;
-      }
+            // Components interpretation of the flow solution (vector - scalar)
+            data_component_interpretation.push_back (DataComponentInterpretation::component_is_part_of_vector);
+            data_component_interpretation.push_back (DataComponentInterpretation::component_is_part_of_vector);
+            data_component_interpretation.push_back(DataComponentInterpretation::component_is_scalar);
 
-      // Components interpretation of the flow solution (vector - scalar)
-      data_component_interpretation.push_back (DataComponentInterpretation::component_is_part_of_vector);
-      data_component_interpretation.push_back (DataComponentInterpretation::component_is_part_of_vector);
-      data_component_interpretation.push_back(DataComponentInterpretation::component_is_scalar);
+            DataOut<dim> data_out;
+            data_out.attach_dof_handler (dof_handler);
+            data_out.add_data_vector (solution, solution_names,
+                                      DataOut<dim>::type_dof_data,
+                                      data_component_interpretation);
 
-      DataOut<dim> data_out;
-      data_out.attach_dof_handler (dof_handler);
-      data_out.add_data_vector (solution, solution_names,
-                                DataOut<dim>::type_dof_data,
-                                data_component_interpretation);
-
-      data_out.build_patches ();
+            data_out.build_patches ();
 
 
-      int tmp = prm.time/prm.time_step;
-      std::ofstream output ("solution_d" + Utilities::to_string(dim) + "_p"+Utilities::to_string(this_mpi,4)+"-" + std::to_string(tmp)+".vtu");
-      data_out.write_vtu (output);
-      //following lines create a file which paraview can use to link the subdomain results
-            if (this_mpi == 0)
-              {
-                std::vector<std::string> filenames;
-                for (unsigned int i=0;
-                     i<Utilities::MPI::n_mpi_processes(mpi_communicator);
-                     ++i)
-                  filenames.push_back ("solution_d" + Utilities::to_string(dim) + "_p"+Utilities::to_string(i,4)+"-" + std::to_string(tmp)+".vtu");
+            int tmp = prm.time/prm.time_step;
+            std::ofstream output ("solution_d" + Utilities::to_string(dim) + "_p"+Utilities::to_string(this_mpi,4)+"-" + std::to_string(tmp)+".vtu");
+            data_out.write_vtu (output);
+            //following lines create a file which paraview can use to link the subdomain results
+                  if (this_mpi == 0)
+                    {
+                      std::vector<std::string> filenames;
+                      for (unsigned int i=0;
+                           i<Utilities::MPI::n_mpi_processes(mpi_communicator);
+                           ++i)
+                        filenames.push_back ("solution_d" + Utilities::to_string(dim) + "_p"+Utilities::to_string(i,4)+"-" + std::to_string(tmp)+".vtu");
 
-                std::ofstream master_output (("solution_d" + Utilities::to_string(dim) + "-" + std::to_string(tmp) +
-                                              ".pvtu").c_str());
-                data_out.write_pvtu_record (master_output, filenames);
-              }
+                      std::ofstream master_output (("solution_d" + Utilities::to_string(dim) + "-" + std::to_string(tmp) +
+                                                    ".pvtu").c_str());
+                      data_out.write_pvtu_record (master_output, filenames);
+                    }
+		}
+
 
      /* end of commenting out for disabling vtu outputs*/
 
-      double total_time = prm.time_step * prm.num_time_steps;
+//      double total_time = prm.time_step * prm.num_time_steps;
       if (Utilities::MPI::this_mpi_process(mpi_communicator) == 0 && cycle == refine-1 && std::abs(prm.time-total_time)<1.0e-12){
     	  convergence_table.set_precision("Velocity,L8-L2", 2);
 //    	  convergence_table.set_precision("DivVelocity,L8-L2", 2);
@@ -4207,7 +4218,7 @@ template <int dim>
 
         convergence_table.set_tex_caption("Velocity,L8-L2", "$ \\|z - z_h\\|_{L^{\\infty}(L^2)} $");
 //        convergence_table.set_tex_caption("DivVelocity,L8-L2", "$ \\|\\nabla\\cdot(z - z_h)\\|_{L^{\\infty}(L^2)} $");
-        convergence_table.set_tex_caption("Velocity,L2-Hdiv", "$ \\|\\nabla\\cdot(\\u - \\u_h)\\|_{L^2(L^2)} $");
+        convergence_table.set_tex_caption("Velocity,L2-Hdiv", "$ \\|\\nabla\\cdot(z - z_h)\\|_{L^2(L^2)} $");
 //        convergence_table.set_tex_caption("Pressure,L2-L2", "$ \\|p - p_h\\|_{L^2(L^2)} $");
 //        convergence_table.set_tex_caption("Pressure,L2-L2mid", "$ \\|Qp - p_h\\|_{L^2(L^2)} $");
         convergence_table.set_tex_caption("Pressure,L8-L2", "$ \\|p - p_h\\|_{L^{\\infty}(L^2)} $");
@@ -4360,6 +4371,12 @@ template <int dim>
                     {
                         GridGenerator::subdivided_hyper_rectangle(triangulation_mortar, reps[n_processes], p1, p2);
                         pcout << "Mortar mesh has " << triangulation_mortar.n_active_cells() << " cells" << std::endl;
+//                        if (true) //to be disable after single run
+//							for (int i=0; i<3; i++)
+//							{
+//							triangulation.refine_global(1);
+//							triangulation_mortar.refine_global(1);
+//							}
                     }
 
 
@@ -4498,12 +4515,14 @@ template <int dim>
                   }
                   compute_errors(cycle);
                   output_results (cycle, refine);
-                  max_cg_iteration=0;
-                  if(split_flag!=0)
-                	  max_cg_iteration_darcy=0;
+//                  max_cg_iteration=0;
+//                  if(split_flag!=0)
+//                	  max_cg_iteration_darcy=0;
 
                 }
-
+                max_cg_iteration=0;
+				if(split_flag!=0)
+					max_cg_iteration_darcy=0;
                 set_current_errors_to_zero();
                 prm.time = 0.0;
 
