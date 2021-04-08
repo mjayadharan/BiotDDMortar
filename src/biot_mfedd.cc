@@ -2218,8 +2218,19 @@ template <int dim>
     //local GMRES function.
       template <int dim>
         void
-		MixedBiotProblemDD<dim>::local_gmres(const unsigned int maxiter)
+		MixedBiotProblemDD<dim>::local_gmres(const unsigned int maxiter, const unsigned int solver_flag)
         {
+    	  /*
+    	   * GMRES solver to solve monolithic, Elasticity, Darcy part. Compatible with the inteface
+    	   * iterations required for subdomain solves. Vector normes are calculated across different
+    	   * processors and summed up appropriately.
+    	   *
+    	   * Author: Manu Jayadharan, University of Pittsburgh.
+    	   *
+    	   * solver flag: 0 implies monolithic scheme solve.
+    	   * 			: 1 implies Elasticity part solve.
+    	   * 			: 2 implies Darcy part solve.
+    	   */
           TimerOutput::Scope t(computing_timer, "Local GMRES");
 
           const unsigned int this_mpi =
@@ -2878,9 +2889,6 @@ template <int dim>
     	TimerOutput::Scope t(computing_timer, "Local CG ");
 
 
-      double local_cg_tolerance(tolerance * (1.e-10));
-//    	 double local_cg_tolerance(1.e-20);
-
 
       const unsigned int this_mpi =
         Utilities::MPI::this_mpi_process(mpi_communicator);
@@ -3148,11 +3156,11 @@ template <int dim>
                   beta_side[side] += r[side][i] * r[side][i];
               }
           if(split_order_flag==0){
-//          pcout << "\r  ..." << cg_iteration
-//                << " Elast iterations completed, (Elast residual = " << fabs(alpha[0])
-//                << ")..." << std::flush;
+          pcout << "\r  ..." << cg_iteration
+                << " Elast iterations completed, (Elast residual = " << sqrt(fabs(alpha[0]) / normB)
+                << ")..." << std::flush;
           // Exit criterion
-          if (fabs(alpha[0]) / normB < local_cg_tolerance )
+          if (sqrt(fabs(alpha[0]) / normB) < tolerance )
 //          if (sqrt(alpha[0]/normB<1.e-8) )
             {
               pcout << "\n  Elast CG converges in " << cg_iteration << " iterations!\n";
@@ -3162,11 +3170,11 @@ template <int dim>
             }
           }
           else if(split_order_flag==1){
-//                   pcout << "\r  ..." << cg_iteration
-//                         << " Darcy iterations completed, (Darcy residual = " << fabs(alpha[0])
-//                         << ")..." << std::flush;
+                   pcout << "\r  ..." << cg_iteration
+                         << " Darcy iterations completed, (Darcy residual = " << sqrt(fabs(alpha[0]) / normB)
+                         << ")..." << std::flush;
                    // Exit criterion
-                   if (fabs(alpha[0]) / normB < local_cg_tolerance )
+                   if (sqrt(fabs(alpha[0]) / normB)< tolerance )
 //        	  if (sqrt(alpha[0]/normB<1.e-8) )
                      {
                        pcout << "\n  Darcy CG converges in " << cg_iteration << " iterations!\n";
