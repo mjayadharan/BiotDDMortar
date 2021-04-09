@@ -2002,7 +2002,8 @@ template <int dim>
         			//solving Elasticity part
         			intermediate_solution.block(4)= old_solution.block(4);
         			assemble_rhs_bar_elast ();
-        	        local_cg(maxiter,0);
+//        	        local_cg(maxiter,0);
+        			local_gmres(maxiter,1);
     //    			local_cg_elast(maxiter);
         	        system_rhs_bar_elast=0;
         	        system_rhs_star_elast=0;
@@ -2014,8 +2015,8 @@ template <int dim>
           			 intermediate_solution.block(0)=solution.block(0);
           			 assemble_rhs_bar_darcy ();
           			pcout << "\nStarting Darcy CG iterations, time t=" << prm.time << "s..." << "\n";
-          			local_cg(maxiter,1);
-    //      			 local_cg_darcy(maxiter);
+//          			local_cg(maxiter,1);
+          			 local_gmres(maxiter, 2);
           			 system_rhs_bar_darcy=0;
           			 system_rhs_star_darcy=0;
          			if (cg_iteration > max_cg_iteration_darcy)
@@ -2235,6 +2236,7 @@ template <int dim>
     	   *
     	   *
     	   */
+    	  pcout<<"Starting local_gmres with flag: "<<solver_flag<<" \n";
           TimerOutput::Scope t(computing_timer, "Local GMRES");
 
           const unsigned int this_mpi =
@@ -2247,7 +2249,12 @@ template <int dim>
           std::vector<std::vector<double>> interface_data_send(n_faces_per_cell);
           std::vector<std::vector<double>> interface_data(n_faces_per_cell);
           std::vector<std::vector<double>> lambda(n_faces_per_cell);
+
+          //defining local copy of  Vectors for different schemes
           std::vector <std::vector<unsigned int>> interface_dofs_local(n_faces_per_cell);
+          BlockVector<double> solution_bar_local;
+          BlockVector<double> solution_star_local;
+
 
           //defining appropriate test inteface dofs vector
           for (unsigned int side = 0; side < n_faces_per_cell; ++side)
@@ -2328,8 +2335,7 @@ template <int dim>
           //defing q  to push_back to Q (reused in Arnoldi algorithm)
           std::vector<std::vector<double>> q(n_faces_per_cell);
 
-          //defining solution bar for different schemes
-          BlockVector<double> solution_bar_local;
+
 
 
           if (solver_flag == 0)
@@ -2673,8 +2679,29 @@ template <int dim>
                           interface_fe_function[interface_dofs_local[side][i]] = interface_data[side][i];
 
                   interface_fe_function.block(2) = 0;
-                  assemble_rhs_star(fe_face_values);
-                  solve_star();
+
+                  if (solver_flag == 0)
+                  {
+                	  assemble_rhs_star(fe_face_values);
+                	  solve_star();
+                	  solution_star_local.reinit(solution_star);
+                	  solution_star_local = solution_star;
+                  }
+                  else if (solver_flag == 1)
+                  {
+                	  assemble_rhs_star_elast(fe_face_values);
+					  solve_star_elast();
+					  solution_star_local.reinit(solution_star_elast);
+					  solution_star_local = solution_star_elast;
+                  }
+                  else if (solver_flag ==2)
+                  {
+                	  assemble_rhs_star_darcy(fe_face_values);
+					  solve_star_darcy();
+					  solution_star_local.reinit(solution_star_darcy);
+					  solution_star_local = solution_star_darcy;
+                  }
+
               }
 
 
@@ -2684,7 +2711,7 @@ template <int dim>
               if (mortar_flag == 1){
                         project_mortar(P_fine2coarse,
                                        dof_handler,
-                                       solution_star,
+                                       solution_star_local,
                                        quad,
                                        constraints_local,
                                        neighbors,
@@ -2692,7 +2719,7 @@ template <int dim>
                                        solution_star_mortar);
 //            	  project_mortar(P_fine2coarse,
 //            	                                         dof_handler,
-//            	                                         solution_star,
+//            	                                         solution_star_local,
 //            	                                         quad,
 //            	                                         constraints,
 //            	                                         neighbors,
@@ -2721,20 +2748,32 @@ template <int dim>
 							}
 							else
 							{
-//                        		interface_data_send[side][i] = -prm.time_step * get_normal_direction(side) * solution_star[interface_dofs_local[side][i]];
+//                        		interface_data_send[side][i] = -prm.time_step * get_normal_direction(side) * solution_star_local[interface_dofs_local[side][i]];
 								interface_data_send[side][i] = - get_normal_direction(side) * solution_star_mortar[interface_dofs_local[side][i]];
 							}
                     else
                         for (unsigned int i=0; i<interface_dofs_local[side].size(); ++i)
-//                            interface_data_send[side][i] = get_normal_direction(side) * solution_star[interface_dofs_local[side][i]];
                         	if (interface_dofs_local[side][i] < n_stress)
-							{
-								interface_data_send[side][i] = get_normal_direction(side) * solution_star[interface_dofs_local[side][i]];
-							}
+                        	{
+                        		if (solver_flag ==0) //monolithic-Elastic  coupled part
+                        		{
+                        			interface_data_send[side][i] = get_normal_direction(side) * solution_star_local[interface_dofs_local[side][i]];
+                        		}
+                        		else if (solver_flag ==1) //Elast-only part
+                        		{
+                        			interface_data_send[side][i] = -(get_normal_direction(side) * solution_star_local[interface_dofs_local[side][i]]);
+                        		}
+                        	}
 							else
 							{
-//                        		interface_data_send[side][i] = -prm.time_step * get_normal_direction(side) * solution_star[interface_dofs_local[side][i]];
-								interface_data_send[side][i] = - get_normal_direction(side) * solution_star[interface_dofs_local[side][i]];
+								if (solver_flag == 0) //monolithic-Darcy coupled part
+								{
+									interface_data_send[side][i] = - get_normal_direction(side) * solution_star_local[interface_dofs_local[side][i]];
+								}
+								else if (solver_flag ==2) //Darcy-only part
+								{
+									interface_data_send[side][i] = - get_normal_direction(side) * solution_star_local[interface_dofs_local[side][i]-n_Elast];
+								}
 							}
 
                     MPI_Send(&interface_data_send[side][0],
@@ -2922,16 +2961,41 @@ template <int dim>
                  }
 
 
-          assemble_rhs_star(fe_face_values);
-          solve_star();
-          solution.reinit(solution_bar_local);
-          solution = solution_bar_local;
-          solution.sadd(1.0, solution_star);
-
-          solution_star.sadd(1.0, solution_bar_local);
-          pcout<<"finished local_gmres"<<"\n";
-
-
+          if (solver_flag == 0) //monolithic scheme: putting solution back together
+          {
+        	  assemble_rhs_star(fe_face_values);
+        	  solve_star();
+        	  solution.reinit(solution_bar_local);
+		   	  solution = solution_bar_local;
+			  solution.sadd(1.0, solution_star);
+			  solution_star.sadd(1.0, solution_bar_local);
+			  pcout<<"finished local_gmres for monolithic scheme"<<"\n";
+          }
+          else if (solver_flag == 1) //Elasticity part: putting solution back together
+          {
+        	  assemble_rhs_star_elast(fe_face_values);
+        	  solve_star_elast();
+        	  solution_elast.reinit(solution_bar_elast);
+			  solution_elast = solution_bar_elast;
+			  solution_elast.sadd(1.0, solution_star_elast);
+			  solution_star_elast.sadd(1.0, solution_bar_elast);
+			  solution.block(0)=solution_elast.block(0);
+			  solution.block(1)=solution_elast.block(1);
+			  solution.block(2)=solution_elast.block(2);
+			  pcout<<"finished local_gmres for Elasticity scheme"<<"\n";
+          }
+          else if (solver_flag == 2) // Darcy part: putting solution back together
+          {
+        	  assemble_rhs_star_darcy(fe_face_values);
+        	  solve_star_darcy();
+        	  solution_darcy.reinit(solution_bar_darcy);
+			  solution_darcy = solution_bar_darcy;
+			  solution_darcy.sadd(1.0, solution_star_darcy);
+			  solution_star_darcy.sadd(1.0, solution_bar_darcy);
+			  solution.block(3)=solution_darcy.block(0);
+			  solution.block(4)=solution_darcy.block(1);
+			  pcout<<"finished local_gmres for Darcy scheme"<<"\n";
+          }
         }
 
 
