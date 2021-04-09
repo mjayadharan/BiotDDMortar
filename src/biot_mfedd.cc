@@ -319,11 +319,11 @@ namespace dd_biot
 			            n_z_mortar = dofs_per_component_mortar[dim*dim + dim + 0.5*dim*(dim-1)];
 			            n_p_mortar = dofs_per_component_mortar[dim*dim + dim + 0.5*dim*(dim-1) + dim];
 
-			            n_stress = n_s_mortar;
-			            n_disp = n_u_mortar;
-			            n_rot = n_g_mortar;
-			            n_flux = n_z_mortar;
-			            n_pressure = n_p_mortar;
+			            n_stress_mortar = n_s_mortar;
+			            n_disp_mortar = n_u_mortar;
+			            n_rot_mortar = n_g_mortar;
+			            n_flux_mortar = n_z_mortar;
+			            n_pressure_mortar = n_p_mortar;
 
 			            solution_bar_mortar.reinit(5);
 			            solution_bar_mortar.block(0).reinit (n_s_mortar);
@@ -1022,16 +1022,34 @@ template <int dim>
                 {
                     cell->face(face_n)->get_dof_indices (local_face_dof_indices, 0);
 
-                    for (auto el : local_face_dof_indices){
-                        if (el < n_stress){
-                            interface_dofs[cell->face(face_n)->boundary_id()-1].push_back(el);
-//                            local_counter++;
-                        }
-                        else if(el>=n_stress+n_disp+n_rot && el<n_stress+n_disp+n_rot+n_flux){
-                        	interface_dofs[cell->face(face_n)->boundary_id()-1].push_back(el);
-//                        	local_counter++;
-                        }
-
+                    for (auto el : local_face_dof_indices)
+                    {
+                    	if(mortar_flag)
+                    	{
+                    		if (el < n_stress_mortar)
+							{
+								interface_dofs[cell->face(face_n)->boundary_id()-1].push_back(el);
+	//                            local_counter++;
+							}
+							else if(el>=n_stress_mortar+n_disp_mortar+n_rot_mortar && el<n_stress_mortar+n_disp_mortar+n_rot_mortar+n_flux_mortar)
+							{
+								interface_dofs[cell->face(face_n)->boundary_id()-1].push_back(el);
+	//                        	local_counter++;
+							}
+                    	}
+                    	else
+                    	{
+                    	    if (el < n_stress)
+							{
+								interface_dofs[cell->face(face_n)->boundary_id()-1].push_back(el);
+	//                            local_counter++;
+							}
+							else if(el>=n_stress+n_disp+n_rot && el<n_stress+n_disp+n_rot+n_flux)
+							{
+								interface_dofs[cell->face(face_n)->boundary_id()-1].push_back(el);
+	//                        	local_counter++;
+							}
+                    	}
                     }
                 }
         }
@@ -1069,13 +1087,18 @@ template <int dim>
                 if (cell->at_boundary(face_n) && cell->face(face_n)->boundary_id() != 0)
                 {
                     cell->face(face_n)->get_dof_indices (local_face_dof_indices, 0);
-
-                    for (auto el : local_face_dof_indices){
-                        if (el < n_stress)
-                            interface_dofs_elast[cell->face(face_n)->boundary_id()-1].push_back(el);
-
-
-
+                    for (auto el : local_face_dof_indices)
+                    {
+                    	if(mortar_flag)
+                    	{
+                    		if (el < n_stress_mortar)
+								interface_dofs_elast[cell->face(face_n)->boundary_id()-1].push_back(el);
+                    	}
+                    	else
+                    	{
+                    		 if (el < n_stress)
+								interface_dofs_elast[cell->face(face_n)->boundary_id()-1].push_back(el);
+                    	}
                     }
                 }
         }
@@ -1961,8 +1984,8 @@ template <int dim>
     	//        local_cg(maxiter);
     			local_gmres (maxiter, 0); //gmres for monolithic scheme
 
-    			if (cg_iteration > max_cg_iteration)
-    			  max_cg_iteration = cg_iteration;
+//    			if (cg_iteration > max_cg_iteration)
+    			  max_cg_iteration += cg_iteration;
 
     			system_rhs_bar = 0;
     			system_rhs_star = 0;
@@ -2006,8 +2029,8 @@ template <int dim>
 //        			local_gmres(maxiter,1); //GMRES solve for elasticity  part
         	        system_rhs_bar_elast=0;
         	        system_rhs_star_elast=0;
-          			if (cg_iteration > max_cg_iteration)
-          			  max_cg_iteration = cg_iteration;
+//          			if (cg_iteration > max_cg_iteration)
+          			  max_cg_iteration += cg_iteration;
           			cg_iteration = 0;
 
           			//solving Darcy part
@@ -2018,8 +2041,8 @@ template <int dim>
 //          			 local_gmres(maxiter, 2); //GMRES solve for Darcy part
           			 system_rhs_bar_darcy=0;
           			 system_rhs_star_darcy=0;
-         			if (cg_iteration > max_cg_iteration_darcy)
-               			  max_cg_iteration_darcy = cg_iteration;
+//         			if (cg_iteration > max_cg_iteration_darcy)
+               			  max_cg_iteration_darcy += cg_iteration;
           			 cg_iteration=0;
 
 
@@ -2069,8 +2092,8 @@ template <int dim>
         			system_rhs_bar_darcy=0;
         			system_rhs_star_darcy=0;
         			pcout << "\nStarting Elast CG iterations, time t=" << prm.time << "s..." << "\n";
-        			if (cg_iteration > max_cg_iteration_darcy)
-        			   max_cg_iteration_darcy = cg_iteration;
+//        			if (cg_iteration > max_cg_iteration_darcy)
+        			   max_cg_iteration_darcy += cg_iteration;
         			cg_iteration=0;
 
         			//solving Elasticity part
@@ -2079,8 +2102,8 @@ template <int dim>
         	        local_cg(maxiter,0);
         	        system_rhs_bar_elast=0;
         	        system_rhs_star_elast=0;
-          			if (cg_iteration > max_cg_iteration)
-          			  max_cg_iteration = cg_iteration;
+//          			if (cg_iteration > max_cg_iteration)
+          			  max_cg_iteration += cg_iteration;
           			 cg_iteration=0;
 
 
@@ -2432,7 +2455,7 @@ template <int dim>
 //                	}
                 	for (unsigned int i = 0; i < interface_dofs_local[side].size(); ++i)
 					{
-							if (interface_dofs_local[side][i]<n_stress)
+							if (interface_dofs[side][i]<n_stress_mortar)
 //                		if (true)
 								{
 								r[side][i] = -(get_normal_direction(side) *
@@ -2736,10 +2759,10 @@ template <int dim>
 
                     // Create vector of u\dot n to send ( need change : add delta_t to the velocity.n terms)
                     if (mortar_flag)
-//                        for (unsigned int i=0; i<interface_dofs_local[side].size(); ++i)
-//                            interface_data_send[side][i] = get_normal_direction(side) * solution_star_mortar[interface_dofs_local[side][i]];
-                    	for (unsigned int i=0; i<interface_dofs_local[side].size(); ++i)
-							if (interface_dofs_local[side][i] < n_stress)
+//                        for (unsigned int i=0; i<interface_dofs[side].size(); ++i)
+//                            interface_data_send[side][i] = get_normal_direction(side) * solution_star_mortar[interface_dofs[side][i]];
+                    	for (unsigned int i=0; i<interface_dofs[side].size(); ++i)
+							if (interface_dofs[side][i] < n_stress_mortar)
 							{
 								interface_data_send[side][i] = get_normal_direction(side) * solution_star_mortar[interface_dofs_local[side][i]];
 							}
@@ -2878,10 +2901,11 @@ template <int dim>
 
 
 
-
-              pcout << "\r  ..." << cg_iteration
-                    << " iterations completed, (residual = " << combined_error_iter
-                    << ")..." << std::flush;
+//
+//              pcout << "\r  ..." << cg_iteration
+//                    << " iterations completed, (residual = " << combined_error_iter
+//                    << ")..." << std::flush;
+//
               // Exit criterion
               if (combined_error_iter < tolerance)
                 {
@@ -3071,6 +3095,16 @@ template <int dim>
 //      interface_fe_function.reinit(solution);
       interface_fe_function = solution;
 
+      if (mortar_flag)
+	  {
+		  interface_fe_function_mortar.reinit(solution_bar_mortar);
+		  solution_bar = 0;
+		  for (unsigned int i=0; i<3; i++)
+		  {
+			  solution_bar.block(i) = solution_bar_elast.block(i);
+		  }
+		  project_mortar(P_fine2coarse, dof_handler, solution_bar, quad, constraints, neighbors, dof_handler_mortar, solution_bar_mortar);
+	  }
 
       double l0 = 0.0;
       // CG with rhs being 0 and initial guess lambda = 0
@@ -3081,7 +3115,7 @@ template <int dim>
             // Something will be here to initialize lambda correctly, right now it
             // is just zero
 //        	std::vector<double> r_receive_buffer;
-        	if(split_order_flag==0)
+        	if(split_order_flag==0) //used for ic construction
         	{
         		if (true || prm.time == prm.time_step)
         		              {
@@ -3097,7 +3131,14 @@ template <int dim>
 
 
             // Right now it is effectively solution_bar - A\lambda (0)
-              for (unsigned int i = 0; i < interface_dofs_elast[side].size(); ++i){
+            if (mortar_flag)
+			   for (unsigned int i=0;i<interface_dofs_elast[side].size();++i)
+			   {
+				   r[side][i] = get_normal_direction(side) * solution_bar_mortar[interface_dofs_elast[side][i]];
+			   }
+            else
+              for (unsigned int i = 0; i < interface_dofs_elast[side].size(); ++i)
+              {
                 r[side][i] = get_normal_direction(side) *
                                solution_bar_elast[interface_dofs_elast[side][i]] -
                              get_normal_direction(side) * solution_star_elast[interface_dofs_elast[side][i]];
@@ -3162,7 +3203,30 @@ template <int dim>
           iteration_counter++;
           interface_data = p;
 
-              for (unsigned int side = 0; side < n_faces_per_cell; ++side)
+          if (mortar_flag)
+          {
+        	  for (unsigned int side=0;side<n_faces_per_cell;++side)
+				  for (unsigned int i=0;i<interface_dofs_elast[side].size();++i)
+					  interface_fe_function_mortar[interface_dofs_elast[side][i]] = interface_data[side][i];
+
+        	  interface_fe_function = 0;
+			  project_mortar(P_coarse2fine, dof_handler_mortar,
+							 interface_fe_function_mortar,
+							 quad,
+							 constraints,
+							 neighbors,
+							 dof_handler,
+							 interface_fe_function);
+//			  interface_fe_function.block(2) = 0;
+
+			  assemble_rhs_star_elast(fe_face_values);
+			  solve_star_elast();
+			  solution_star=0;
+			  solution_star.block(0) = solution_star_elast.block(0);
+          }
+          else
+          {
+          for (unsigned int side = 0; side < n_faces_per_cell; ++side)
             	  if(split_order_flag==0){
             		  for (unsigned int i = 0; i < interface_dofs_elast[side].size(); ++i)
             			  interface_fe_function[interface_dofs_elast[side][i]] = interface_data[side][i];
@@ -3173,7 +3237,8 @@ template <int dim>
             	  }
 
 
-              if(split_order_flag==0){
+              if(split_order_flag==0)
+              {
             	  interface_fe_function.block(2) = 0;
             	  assemble_rhs_star_elast(fe_face_values);
             	  solve_star_elast();
@@ -3182,11 +3247,21 @@ template <int dim>
                        	  assemble_rhs_star_darcy(fe_face_values);
                        	  solve_star_darcy();
               }
+          }
 //              solve_star();
 
 
           cg_iteration++;
 
+          if (mortar_flag)
+			  project_mortar(P_fine2coarse,
+							 dof_handler,
+							 solution_star,
+							 quad,
+							 constraints,
+							 neighbors,
+							 dof_handler_mortar,
+							 solution_star_mortar);
 
           for (unsigned int side = 0; side < n_faces_per_cell; ++side)
             if (neighbors[side] >= 0)
@@ -3198,10 +3273,18 @@ template <int dim>
 
                 // Create vector of u\dot n to send
                 if(split_order_flag==0){
-                  for (unsigned int i = 0; i < interface_dofs_elast[side].size(); ++i)
-                    interface_data_send[side][i] =
-                      get_normal_direction(side) *
-                      solution_star_elast[interface_dofs_elast[side][i]];
+                	if (mortar_flag)
+                	{
+                		for (unsigned int i=0; i<interface_dofs_elast[side].size(); ++i)
+							interface_data_send[side][i] = get_normal_direction(side)
+														   * solution_star_mortar[interface_dofs_elast[side][i]];
+                	}
+                	else
+                	{
+                		for (unsigned int i = 0; i < interface_dofs_elast[side].size(); ++i)
+							interface_data_send[side][i] =get_normal_direction(side)
+										  	  	  	  	  * solution_star_elast[interface_dofs_elast[side][i]];
+                	}
                 }
                 else if(split_order_flag==1){
                                   for (unsigned int i = 0; i < interface_dofs_darcy[side].size(); ++i)
@@ -3261,6 +3344,7 @@ template <int dim>
           if (cg_iteration == 1){
             normB = alpha[0];
             normRold = alpha[0];
+            pcout<<"normB is:"<<normB<<std::endl;
           }
 
           normRold = alpha[0];
@@ -3338,16 +3422,32 @@ template <int dim>
           Ap.resize(n_faces_per_cell);
         }
 
-
           interface_data = lambda;
-          //
           if(split_order_flag==0)
           {
-			  for (unsigned int side = 0; side < n_faces_per_cell; ++side)
-				for (unsigned int i = 0; i < interface_dofs_elast[side].size(); ++i)
-				  interface_fe_function[interface_dofs_elast[side][i]] =
-					interface_data[side][i];
+              if (mortar_flag)
+				 {
+					 for (unsigned int side=0;side<n_faces_per_cell;++side)
+						 for (unsigned int i=0;i<interface_dofs_elast[side].size();++i)
+							 interface_fe_function_mortar[interface_dofs_elast[side][i]] = interface_data[side][i];
 
+					 project_mortar(P_coarse2fine,
+									dof_handler_mortar,
+									interface_fe_function_mortar,
+									quad,
+									constraints,
+									neighbors,
+									dof_handler,
+									interface_fe_function);
+					 interface_fe_function.block(2) = 0;
+				 }
+              else
+              {
+            	  for (unsigned int side = 0; side < n_faces_per_cell; ++side)
+					for (unsigned int i = 0; i < interface_dofs_elast[side].size(); ++i)
+					  interface_fe_function[interface_dofs_elast[side][i]] =
+						interface_data[side][i];
+              }
 
 		  assemble_rhs_star_elast(fe_face_values);
 		  solve_star_elast();
@@ -4037,10 +4137,14 @@ template <int dim>
 
         convergence_table.add_value("cycle", cycle);
         if(split_flag==0)
-        convergence_table.add_value("# GMRES", max_cg_iteration);
+        {
+        	int average_iteration_num = max_cg_iteration/prm.num_time_steps;
+//        	pcout<<"\n\n\ngmres iterations"<<max_cg_iteration<<max_cg_iteration/prm.num_time_steps<<"\n\n\n";
+        	convergence_table.add_value("# GMRES", average_iteration_num);
+        }
         else if(split_flag!=0){
-        	convergence_table.add_value("# CG_Elast",max_cg_iteration);
-        	convergence_table.add_value("# CG_Darcy",max_cg_iteration_darcy);
+        	convergence_table.add_value("# CG_Elast",max_cg_iteration/prm.num_time_steps);
+        	convergence_table.add_value("# CG_Darcy",max_cg_iteration_darcy/prm.num_time_steps);
         }
         if(mortar_flag == 2)
         {
@@ -4097,102 +4201,108 @@ template <int dim>
         unsigned int n_processes = Utilities::MPI::n_mpi_processes(mpi_communicator);
         unsigned int this_mpi = Utilities::MPI::this_mpi_process(mpi_communicator);
 
-        /* From here disabling for longer runs:
+        double total_time = prm.time_step * prm.num_time_steps;
+
+
+        /* From here disabling for longer runs: Now outputting solution only for t=0 and t=T(final time).
          */
+        if(fabs(prm.time-total_time)<1.0e-12 || prm.time<1.0e-12)
+		{
+            std::vector<std::string> solution_names;
+            switch(dim)
+            {
+              case 2:
+                solution_names.push_back ("s11");
+                solution_names.push_back ("s12");
+                solution_names.push_back ("s21");
+                solution_names.push_back ("s22");
+                solution_names.push_back ("d1");
+                solution_names.push_back ("d2");
+                solution_names.push_back ("r");
+                solution_names.push_back ("u1");
+                solution_names.push_back ("u2");
+                solution_names.push_back ("p");
+                break;
 
-      std::vector<std::string> solution_names;
-      switch(dim)
-      {
-        case 2:
-          solution_names.push_back ("s11");
-          solution_names.push_back ("s12");
-          solution_names.push_back ("s21");
-          solution_names.push_back ("s22");
-          solution_names.push_back ("d1");
-          solution_names.push_back ("d2");
-          solution_names.push_back ("r");
-          solution_names.push_back ("u1");
-          solution_names.push_back ("u2");
-          solution_names.push_back ("p");
-          break;
+              case 3:
+                solution_names.push_back ("s11");
+                solution_names.push_back ("s12");
+                solution_names.push_back ("s13");
+                solution_names.push_back ("s21");
+                solution_names.push_back ("s22");
+                solution_names.push_back ("s23");
+                solution_names.push_back ("s31");
+                solution_names.push_back ("s32");
+                solution_names.push_back ("s33");
+                solution_names.push_back ("d1");
+                solution_names.push_back ("d2");
+                solution_names.push_back ("d3");
+                solution_names.push_back ("r1");
+                solution_names.push_back ("r2");
+                solution_names.push_back ("r3");
+                solution_names.push_back ("u1");
+                solution_names.push_back ("u2");
+                solution_names.push_back ("u3");
+                solution_names.push_back ("p");
+                break;
 
-        case 3:
-          solution_names.push_back ("s11");
-          solution_names.push_back ("s12");
-          solution_names.push_back ("s13");
-          solution_names.push_back ("s21");
-          solution_names.push_back ("s22");
-          solution_names.push_back ("s23");
-          solution_names.push_back ("s31");
-          solution_names.push_back ("s32");
-          solution_names.push_back ("s33");
-          solution_names.push_back ("d1");
-          solution_names.push_back ("d2");
-          solution_names.push_back ("d3");
-          solution_names.push_back ("r1");
-          solution_names.push_back ("r2");
-          solution_names.push_back ("r3");
-          solution_names.push_back ("u1");
-          solution_names.push_back ("u2");
-          solution_names.push_back ("u3");
-          solution_names.push_back ("p");
-          break;
+              default:
+              Assert(false, ExcNotImplemented());
+            }
 
-        default:
-        Assert(false, ExcNotImplemented());
-      }
+            // Components interpretation of the mechanics solution (vector^dim - vector - rotation)
+            std::vector<DataComponentInterpretation::DataComponentInterpretation> data_component_interpretation(dim*dim+dim, DataComponentInterpretation::component_is_part_of_vector);
+            switch (dim)
+            {
+              case 2:
+                data_component_interpretation.push_back (DataComponentInterpretation::component_is_scalar);
+                break;
 
-      // Components interpretation of the mechanics solution (vector^dim - vector - rotation)
-      std::vector<DataComponentInterpretation::DataComponentInterpretation> data_component_interpretation(dim*dim+dim, DataComponentInterpretation::component_is_part_of_vector);
-      switch (dim)
-      {
-        case 2:
-          data_component_interpretation.push_back (DataComponentInterpretation::component_is_scalar);
-          break;
+              case 3:
+                data_component_interpretation.push_back (DataComponentInterpretation::component_is_part_of_vector);
+                break;
 
-        case 3:
-          data_component_interpretation.push_back (DataComponentInterpretation::component_is_part_of_vector);
-          break;
+              default:
+              Assert(false, ExcNotImplemented());
+                break;
+            }
 
-        default:
-        Assert(false, ExcNotImplemented());
-          break;
-      }
+            // Components interpretation of the flow solution (vector - scalar)
+            data_component_interpretation.push_back (DataComponentInterpretation::component_is_part_of_vector);
+            data_component_interpretation.push_back (DataComponentInterpretation::component_is_part_of_vector);
+            data_component_interpretation.push_back(DataComponentInterpretation::component_is_scalar);
 
-      // Components interpretation of the flow solution (vector - scalar)
-      data_component_interpretation.push_back (DataComponentInterpretation::component_is_part_of_vector);
-      data_component_interpretation.push_back (DataComponentInterpretation::component_is_part_of_vector);
-      data_component_interpretation.push_back(DataComponentInterpretation::component_is_scalar);
+            DataOut<dim> data_out;
+            data_out.attach_dof_handler (dof_handler);
+            data_out.add_data_vector (solution, solution_names,
+                                      DataOut<dim>::type_dof_data,
+                                      data_component_interpretation);
 
-      DataOut<dim> data_out;
-      data_out.attach_dof_handler (dof_handler);
-      data_out.add_data_vector (solution, solution_names,
-                                DataOut<dim>::type_dof_data,
-                                data_component_interpretation);
-
-      data_out.build_patches ();
+            data_out.build_patches ();
 
 
-      int tmp = prm.time/prm.time_step;
-      std::ofstream output ("solution_d" + Utilities::to_string(dim) + "_p"+Utilities::to_string(this_mpi,4)+"-" + std::to_string(tmp)+".vtu");
-      data_out.write_vtu (output);
-      //following lines create a file which paraview can use to link the subdomain results
-            if (this_mpi == 0)
-              {
-                std::vector<std::string> filenames;
-                for (unsigned int i=0;
-                     i<Utilities::MPI::n_mpi_processes(mpi_communicator);
-                     ++i)
-                  filenames.push_back ("solution_d" + Utilities::to_string(dim) + "_p"+Utilities::to_string(i,4)+"-" + std::to_string(tmp)+".vtu");
+            int tmp = prm.time/prm.time_step;
+            std::ofstream output ("solution_d" + Utilities::to_string(dim) + "_p"+Utilities::to_string(this_mpi,4)+"-" + std::to_string(tmp)+".vtu");
+            data_out.write_vtu (output);
+            //following lines create a file which paraview can use to link the subdomain results
+                  if (this_mpi == 0)
+                    {
+                      std::vector<std::string> filenames;
+                      for (unsigned int i=0;
+                           i<Utilities::MPI::n_mpi_processes(mpi_communicator);
+                           ++i)
+                        filenames.push_back ("solution_d" + Utilities::to_string(dim) + "_p"+Utilities::to_string(i,4)+"-" + std::to_string(tmp)+".vtu");
 
-                std::ofstream master_output (("solution_d" + Utilities::to_string(dim) + "-" + std::to_string(tmp) +
-                                              ".pvtu").c_str());
-                data_out.write_pvtu_record (master_output, filenames);
-              }
+                      std::ofstream master_output (("solution_d" + Utilities::to_string(dim) + "-" + std::to_string(tmp) +
+                                                    ".pvtu").c_str());
+                      data_out.write_pvtu_record (master_output, filenames);
+                    }
+		}
+
 
      /* end of commenting out for disabling vtu outputs*/
 
-      double total_time = prm.time_step * prm.num_time_steps;
+//      double total_time = prm.time_step * prm.num_time_steps;
       if (Utilities::MPI::this_mpi_process(mpi_communicator) == 0 && cycle == refine-1 && std::abs(prm.time-total_time)<1.0e-12){
     	  convergence_table.set_precision("Velocity,L8-L2", 2);
 //    	  convergence_table.set_precision("DivVelocity,L8-L2", 2);
@@ -4391,6 +4501,12 @@ template <int dim>
                     {
                         GridGenerator::subdivided_hyper_rectangle(triangulation_mortar, reps[n_processes], p1, p2);
                         pcout << "Mortar mesh has " << triangulation_mortar.n_active_cells() << " cells" << std::endl;
+//                        if (true) //to be disable after single run
+//							for (int i=0; i<3; i++)
+//							{
+//							triangulation.refine_global(1);
+//							triangulation_mortar.refine_global(1);
+//							}
                     }
 
 
@@ -4529,12 +4645,14 @@ template <int dim>
                   }
                   compute_errors(cycle);
                   output_results (cycle, refine);
-                  max_cg_iteration=0;
-                  if(split_flag!=0)
-                	  max_cg_iteration_darcy=0;
+//                  max_cg_iteration=0;
+//                  if(split_flag!=0)
+//                	  max_cg_iteration_darcy=0;
 
                 }
-
+                max_cg_iteration=0;
+				if(split_flag!=0)
+					max_cg_iteration_darcy=0;
                 set_current_errors_to_zero();
                 prm.time = 0.0;
 
