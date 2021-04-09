@@ -36,13 +36,13 @@ int main (int argc, char *argv[])
         BiotParameters bparam (0.001,1,c0,alpha);
 
 //        //BiotDD without mortar
-//        MixedBiotProblemDD<2> drained_split(1, bparam,0,0,1);
+        MixedBiotProblemDD<2> drained_split(1, bparam,0,0,1);
 //        MixedBiotProblemDD<2> fixed_stress(1,bparam,0,0,2);
 //        MixedBiotProblemDD<2> monolithic(1,bparam,0,0,0,0);
 
-//        drained_split.run (num_cycle, mesh_m2d, tolerence, max_itr);
+        drained_split.run (num_cycle, mesh_m2d, tolerence, max_itr);
 //        fixed_stress.run(num_cycle, mesh_m2d, tolerence, max_itr);
-        monolithic.run (num_cycle, mesh_m2d, tolerence, max_itr);
+//        monolithic.run (num_cycle, mesh_m2d, tolerence, max_itr);
 
      //BiotDD with mortar
 //        MixedBiotProblemDD<2> lin_mortar(1,bparam,1,1,0,0);
