@@ -3103,7 +3103,7 @@ template <int dim>
 		  {
 			  solution_bar.block(i) = solution_bar_elast.block(i);
 		  }
-		  project_mortar(P_fine2coarse, dof_handler, solution_bar, quad, constraints, neighbors, dof_handler_mortar, solution_bar_mortar);
+		  project_mortar(P_fine2coarse, dof_handler, solution_bar, quad, constraints_local, neighbors, dof_handler_mortar, solution_bar_mortar);
 	  }
 
       double l0 = 0.0;
@@ -3213,7 +3213,7 @@ template <int dim>
 			  project_mortar(P_coarse2fine, dof_handler_mortar,
 							 interface_fe_function_mortar,
 							 quad,
-							 constraints,
+							 constraints_local,
 							 neighbors,
 							 dof_handler,
 							 interface_fe_function);
@@ -3258,7 +3258,7 @@ template <int dim>
 							 dof_handler,
 							 solution_star,
 							 quad,
-							 constraints,
+							 constraints_local,
 							 neighbors,
 							 dof_handler_mortar,
 							 solution_star_mortar);
@@ -3435,7 +3435,7 @@ template <int dim>
 									dof_handler_mortar,
 									interface_fe_function_mortar,
 									quad,
-									constraints,
+									constraints_local,
 									neighbors,
 									dof_handler,
 									interface_fe_function);
