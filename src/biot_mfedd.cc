@@ -1959,7 +1959,7 @@ template <int dim>
     			pcout << "\nStarting GMRES iterations, time t=" << prm.time << "s..." << "\n";
     			assemble_rhs_bar ();
     	//        local_cg(maxiter);
-    			local_gmres (maxiter);
+    			local_gmres (maxiter, o); //gmres for monolithic scheme
 
     			if (cg_iteration > max_cg_iteration)
     			  max_cg_iteration = cg_iteration;
@@ -2002,9 +2002,8 @@ template <int dim>
         			//solving Elasticity part
         			intermediate_solution.block(4)= old_solution.block(4);
         			assemble_rhs_bar_elast ();
-//        	        local_cg(maxiter,0);
-        			local_gmres(maxiter,1);
-    //    			local_cg_elast(maxiter);
+        	        local_cg(maxiter,0); //CG solve for elasticity  part
+//        			local_gmres(maxiter,1); //GMRES solve for elasticity  part
         	        system_rhs_bar_elast=0;
         	        system_rhs_star_elast=0;
           			if (cg_iteration > max_cg_iteration)
@@ -2015,8 +2014,8 @@ template <int dim>
           			 intermediate_solution.block(0)=solution.block(0);
           			 assemble_rhs_bar_darcy ();
           			pcout << "\nStarting Darcy CG iterations, time t=" << prm.time << "s..." << "\n";
-//          			local_cg(maxiter,1);
-          			 local_gmres(maxiter, 2);
+          			local_cg(maxiter,1); //CG solve for Darcy part
+//          			 local_gmres(maxiter, 2); //GMRES solve for Darcy part
           			 system_rhs_bar_darcy=0;
           			 system_rhs_star_darcy=0;
          			if (cg_iteration > max_cg_iteration_darcy)
@@ -2067,7 +2066,6 @@ template <int dim>
         			 assemble_rhs_bar_darcy ();
         			 pcout << "\nStarting Darcy CG iterations, time t=" << prm.time << "s..." << "\n";
         			 local_cg(maxiter,1);
-        			//local_cg_darcy(maxiter);
         			system_rhs_bar_darcy=0;
         			system_rhs_star_darcy=0;
         			pcout << "\nStarting Elast CG iterations, time t=" << prm.time << "s..." << "\n";
@@ -2079,7 +2077,6 @@ template <int dim>
         			intermediate_solution.block(4)= solution.block(4);
         			assemble_rhs_bar_elast ();
         	        local_cg(maxiter,0);
-    //    			local_cg_elast(maxiter);
         	        system_rhs_bar_elast=0;
         	        system_rhs_star_elast=0;
           			if (cg_iteration > max_cg_iteration)
