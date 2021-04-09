@@ -1982,7 +1982,7 @@ template <int dim>
     			pcout << "\nStarting GMRES iterations, time t=" << prm.time << "s..." << "\n";
     			assemble_rhs_bar ();
     	//        local_cg(maxiter);
-    			local_gmres (maxiter);
+    			local_gmres (maxiter, 0); //gmres for monolithic scheme
 
 //    			if (cg_iteration > max_cg_iteration)
     			  max_cg_iteration += cg_iteration;
@@ -2025,8 +2025,8 @@ template <int dim>
         			//solving Elasticity part
         			intermediate_solution.block(4)= old_solution.block(4);
         			assemble_rhs_bar_elast ();
-        	        local_cg(maxiter,0);
-    //    			local_cg_elast(maxiter);
+        	        local_cg(maxiter,0); //CG solve for elasticity  part
+//        			local_gmres(maxiter,1); //GMRES solve for elasticity  part
         	        system_rhs_bar_elast=0;
         	        system_rhs_star_elast=0;
 //          			if (cg_iteration > max_cg_iteration)
@@ -2037,8 +2037,8 @@ template <int dim>
           			 intermediate_solution.block(0)=solution.block(0);
           			 assemble_rhs_bar_darcy ();
           			pcout << "\nStarting Darcy CG iterations, time t=" << prm.time << "s..." << "\n";
-          			local_cg(maxiter,1);
-    //      			 local_cg_darcy(maxiter);
+          			local_cg(maxiter,1); //CG solve for Darcy part
+//          			 local_gmres(maxiter, 2); //GMRES solve for Darcy part
           			 system_rhs_bar_darcy=0;
           			 system_rhs_star_darcy=0;
 //         			if (cg_iteration > max_cg_iteration_darcy)
@@ -2089,7 +2089,6 @@ template <int dim>
         			 assemble_rhs_bar_darcy ();
         			 pcout << "\nStarting Darcy CG iterations, time t=" << prm.time << "s..." << "\n";
         			 local_cg(maxiter,1);
-        			//local_cg_darcy(maxiter);
         			system_rhs_bar_darcy=0;
         			system_rhs_star_darcy=0;
         			pcout << "\nStarting Elast CG iterations, time t=" << prm.time << "s..." << "\n";
@@ -2101,7 +2100,6 @@ template <int dim>
         			intermediate_solution.block(4)= solution.block(4);
         			assemble_rhs_bar_elast ();
         	        local_cg(maxiter,0);
-    //    			local_cg_elast(maxiter);
         	        system_rhs_bar_elast=0;
         	        system_rhs_star_elast=0;
 //          			if (cg_iteration > max_cg_iteration)
@@ -2118,7 +2116,7 @@ template <int dim>
     void MixedBiotProblemDD<dim>::compute_multiscale_basis ()
     {
         TimerOutput::Scope t(computing_timer, "Compute multiscale basis");
-        ConstraintMatrix constraints;
+        ConstraintMatrix constraints_local;
         QGauss<dim-1> quad(qdegree);
         FEFaceValues<dim> fe_face_values (fe, quad,
                                           update_values    | update_normal_vectors |
@@ -2146,7 +2144,7 @@ template <int dim>
 
                 tmp_basis = 0;
                 tmp_basis[interface_dofs[side][i]] = 1.0;
-                project_mortar(P_coarse2fine, dof_handler_mortar, tmp_basis, quad, constraints, neighbors, dof_handler, interface_fe_function);
+                project_mortar(P_coarse2fine, dof_handler_mortar, tmp_basis, quad, constraints_local, neighbors, dof_handler, interface_fe_function);
 
                 interface_fe_function.block(1) = 0;
                 interface_fe_function.block(2) = 0;
@@ -2154,7 +2152,7 @@ template <int dim>
                 assemble_rhs_star(fe_face_values);
                 solve_star();
 
-                project_mortar(P_fine2coarse, dof_handler, solution_star, quad, constraints, neighbors, dof_handler_mortar, multiscale_basis[ind]);
+                project_mortar(P_fine2coarse, dof_handler, solution_star, quad, constraints_local, neighbors, dof_handler_mortar, multiscale_basis[ind]);
                 ind += 1;
             }
 
@@ -2241,8 +2239,24 @@ template <int dim>
     //local GMRES function.
       template <int dim>
         void
-		MixedBiotProblemDD<dim>::local_gmres(const unsigned int maxiter)
+		MixedBiotProblemDD<dim>::local_gmres(const unsigned int maxiter, const unsigned int solver_flag)
         {
+    	  /*
+    	   * GMRES solver to solve monolithic, Elasticity, Darcy part. Compatible with the inteface
+    	   * iterations required for subdomain solves. Vector normes are calculated across different
+    	   * processors and summed up appropriately.
+    	   *
+    	   * solver flag: 0 implies monolithic scheme solve.
+    	   * 			: 1 implies Elasticity part solve.
+    	   * 			: 2 implies Darcy part solve.
+
+    	   * Currently not compatible with mortar flag
+    	   *
+    	   * Author: Manu Jayadharan, University of Pittsburgh.
+    	   *
+    	   *
+    	   */
+    	  pcout<<"Starting local_gmres with flag: "<<solver_flag<<" \n";
           TimerOutput::Scope t(computing_timer, "Local GMRES");
 
           const unsigned int this_mpi =
@@ -2256,25 +2270,53 @@ template <int dim>
           std::vector<std::vector<double>> interface_data(n_faces_per_cell);
           std::vector<std::vector<double>> lambda(n_faces_per_cell);
 
+          //defining local copy of  Vectors for different schemes
+          std::vector <std::vector<unsigned int>> interface_dofs_local(n_faces_per_cell);
+          BlockVector<double> solution_bar_local;
+          BlockVector<double> solution_star_local;
+
+
+          //defining appropriate test inteface dofs vector
+          for (unsigned int side = 0; side < n_faces_per_cell; ++side)
+          {
+			  if (solver_flag == 0)
+			  {
+				  interface_dofs_local[side].resize(interface_dofs[side].size(), 0);
+				  interface_dofs_local[side] = interface_dofs[side];
+			  }
+			  else if (solver_flag == 1)
+			  {
+				  interface_dofs_local[side].resize(interface_dofs_elast[side].size(), 0);
+				  interface_dofs_local[side] = interface_dofs_elast[side];
+			  }
+			  if (solver_flag == 2)
+			  {
+				  interface_dofs_local[side].resize(interface_dofs_darcy[side].size(), 0);
+				  interface_dofs_local[side] = interface_dofs_darcy[side];
+			  }
+          }
+
+
 
           for (unsigned int side = 0; side < n_faces_per_cell; ++side)
-            if (neighbors[side] >= 0)
-              {
-                    interface_data_receive[side].resize(interface_dofs[side].size(),
-                                                        0);
-                    interface_data_send[side].resize(interface_dofs[side].size(), 0);
-                    interface_data[side].resize(interface_dofs[side].size(), 0);
+          {
+        	  if (neighbors[side] >= 0) //monolithic solve
+			  {
+        		  interface_data_receive[side].resize(interface_dofs_local[side].size(), 0);
+				  interface_data_send[side].resize(interface_dofs_local[side].size(), 0);
+				  interface_data[side].resize(interface_dofs_local[side].size(), 0);
+			  }
+          }
 
-              }
 
           // Extra for projections from mortar to fine grid and RHS assembly
           Quadrature<dim - 1> quad;
           quad = QGauss<dim - 1>(qdegree);
 
 
-          ConstraintMatrix  constraints;
-          constraints.clear();
-          constraints.close();
+          ConstraintMatrix  constraints_local;
+          constraints_local.clear();
+          constraints_local.close();
           FEFaceValues<dim> fe_face_values(fe,
                                            quad,
                                            update_values | update_normal_vectors |
@@ -2303,7 +2345,7 @@ template <int dim>
             beta_side_d(n_faces_per_cell, 0); //to be deleted
           std::vector<double> alpha(2, 0), beta(2, 0); //to be deleted
 
-          std::vector<std::vector<double>> r(n_faces_per_cell); //to be deleted probably: p?
+          std::vector<std::vector<double>> r(n_faces_per_cell);
           std::vector<double> r_norm_side(n_faces_per_cell,0);
           std::vector<std::vector<double>> r_b(n_faces_per_cell); //RHS
           std::vector<double> r_b_norm_side(n_faces_per_cell,0);
@@ -2313,20 +2355,40 @@ template <int dim>
           //defing q  to push_back to Q (reused in Arnoldi algorithm)
           std::vector<std::vector<double>> q(n_faces_per_cell);
 
-          solve_bar();
+
+
+
+          if (solver_flag == 0)
+          {
+        	  solve_bar();
+        	  solution_bar_local.reinit(solution_bar);
+        	  solution_bar_local = solution_bar;
+          }
+          else if (solver_flag ==1)
+          {
+        	  solve_bar_elast();
+        	  solution_bar_local.reinit(solution_bar_elast);
+			  solution_bar_local = solution_bar_elast;
+          }
+          else if (solver_flag ==2)
+          {
+        	  solve_bar_darcy();
+        	  solution_bar_local.reinit(solution_bar_darcy);
+			  solution_bar_local = solution_bar_darcy;
+          }
 //          std::ofstream rhs_output_file("solution_bar.txt");
 //          for(int i =0; i<solution_bar.size();i++)
 //        	  rhs_output_file<<i<<" : "<<solution_bar[i]<<"\n";
 
 //          interface_fe_function.reinit(solution_bar);
-          interface_fe_function = solution_bar;
+//          interface_fe_function = solution_bar;
 
           if (mortar_flag == 1)
           {
 //              interface_fe_function_mortar.reinit(solution_bar_mortar);
         	  interface_fe_function_mortar=0;
-              project_mortar(P_fine2coarse, dof_handler, solution_bar, quad, constraints, neighbors, dof_handler_mortar, solution_bar_mortar);
-//              project_mortar(P_fine2coarse, dof_handler, solution_bar, quad, constraints, neighbors, dof_handler, solution_bar_mortar);
+              project_mortar(P_fine2coarse, dof_handler, solution_bar_local, quad, constraints_local, neighbors, dof_handler_mortar, solution_bar_mortar);
+//              project_mortar(P_fine2coarse, dof_handler, solution_bar_local, quad, constraints, neighbors, dof_handler, solution_bar_mortar);
           }
           else if (mortar_flag == 2)
           {
@@ -2339,16 +2401,16 @@ template <int dim>
               // for the sake of memory. Same for solve_star() calls, they should only appear after the solve_bar()
 //              compute_multiscale_basis();
 //              pcout << "Done computing multiscale basis\n";
-              project_mortar(P_fine2coarse, dof_handler, solution_bar, quad, constraints, neighbors, dof_handler_mortar, solution_bar_mortar);
+              project_mortar(P_fine2coarse, dof_handler, solution_bar_local, quad, constraints_local, neighbors, dof_handler_mortar, solution_bar_mortar);
 
               // Instead of solving subdomain problems we compute the response using basis
               unsigned int j=0;
               for (unsigned int side=0; side<n_faces_per_cell; ++side)
-                  for (unsigned int i=0;i<interface_dofs[side].size();++i)
+                  for (unsigned int i=0;i<interface_dofs_local[side].size();++i)
                   {
-//                      solution_star_mortar.sadd(1.0, interface_fe_function_mortar[interface_dofs[side][i]], multiscale_basis[j]);
-                	  solution_star_mortar.block(0).sadd(1.0, interface_fe_function_mortar[interface_dofs[side][i]], multiscale_basis[j].block(0));
-                      solution_star_mortar.block(3).sadd(1.0, interface_fe_function_mortar[interface_dofs[side][i]], multiscale_basis[j].block(3));
+//                      solution_star_mortar.sadd(1.0, interface_fe_function_mortar[interface_dofs_local[side][i]], multiscale_basis[j]);
+                	  solution_star_mortar.block(0).sadd(1.0, interface_fe_function_mortar[interface_dofs_local[side][i]], multiscale_basis[j].block(0));
+                      solution_star_mortar.block(3).sadd(1.0, interface_fe_function_mortar[interface_dofs_local[side][i]], multiscale_basis[j].block(3));
                       j += 1;
                   }
           }
@@ -2363,12 +2425,12 @@ template <int dim>
 
                 // Something will be here to initialize lambda correctly, right now it
                 // is just zero
-                Ap[side].resize(interface_dofs[side].size(), 0);
-                lambda[side].resize(interface_dofs[side].size(), 0);
+                Ap[side].resize(interface_dofs_local[side].size(), 0);
+                lambda[side].resize(interface_dofs_local[side].size(), 0);
                 if (true || prm.time == prm.time_step)
 						{
-							Ap[side].resize(interface_dofs[side].size(), 0);
-							lambda[side].resize(interface_dofs[side].size(), 0);
+							Ap[side].resize(interface_dofs_local[side].size(), 0);
+							lambda[side].resize(interface_dofs_local[side].size(), 0);
 						}
 						else
 						{
@@ -2376,9 +2438,9 @@ template <int dim>
 							lambda = lambda_guess;
 						}
 
-                q[side].resize(interface_dofs[side].size());
-                r[side].resize(interface_dofs[side].size(), 0);
-                r_b[side].resize(interface_dofs[side].size(), 0);
+                q[side].resize(interface_dofs_local[side].size());
+                r[side].resize(interface_dofs_local[side].size(), 0);
+                r_b[side].resize(interface_dofs_local[side].size(), 0);
                 std::vector<double> r_receive_buffer(r[side].size());
                 std::vector<double> r_b_receive_buffer(r[side].size());
                 //temporarily fixing a size for Q_side matrix
@@ -2387,64 +2449,78 @@ template <int dim>
 
                 // Right now it is effectively solution_bar - A\lambda (0) (need change here: change in sign for velocity.n)
                 if(mortar_flag)
-//                	for (unsigned int i=0;i<interface_dofs[side].size();++i){
-////                	                      r[side][i] = get_normal_direction(side) * solution_bar_mortar[interface_dofs[side][i]]
+//                	for (unsigned int i=0;i<interface_dofs_local[side].size();++i){
+////                	                      r[side][i] = get_normal_direction(side) * solution_bar_mortar[interface_dofs_local[side][i]]
 ////                	                                   - get_normal_direction(side) * Ap[side][i];
 //                	}
-                	for (unsigned int i = 0; i < interface_dofs[side].size(); ++i)
+                	for (unsigned int i = 0; i < interface_dofs_local[side].size(); ++i)
 					{
 							if (interface_dofs[side][i]<n_stress_mortar)
 //                		if (true)
 								{
 								r[side][i] = -(get_normal_direction(side) *
-											   solution_bar_mortar[interface_dofs[side][i]] );
+											   solution_bar_mortar[interface_dofs_local[side][i]] );
 
 								r_b[side][i] = -(get_normal_direction(side) *
-																			   solution_bar_mortar[interface_dofs[side][i]]);
+																			   solution_bar_mortar[interface_dofs_local[side][i]]);
 								}
 							else
 							{
 //								r[side][i] = prm.time_step*get_normal_direction(side) *
-//											   solution_bar[interface_dofs[side][i]]
-//															- prm.time_step* get_normal_direction(side) *solution_star[interface_dofs[side][i]] ;
+//											   solution_bar[interface_dofs_local[side][i]]
+//															- prm.time_step* get_normal_direction(side) *solution_star[interface_dofs_local[side][i]] ;
 								r[side][i] = get_normal_direction(side) *
-											   solution_bar_mortar[interface_dofs[side][i]];
+											   solution_bar_mortar[interface_dofs_local[side][i]];
 
 
 //								r_b[side][i] = prm.time_step*get_normal_direction(side) *
-//																			   solution_bar[interface_dofs[side][i]];
+//																			   solution_bar[interface_dofs_local[side][i]];
 
-								r_b[side][i] = get_normal_direction(side)*solution_bar_mortar[interface_dofs[side][i]];
+								r_b[side][i] = get_normal_direction(side)*solution_bar_mortar[interface_dofs_local[side][i]];
 
 
 							}
 					}
                 else
-                	for (unsigned int i = 0; i < interface_dofs[side].size(); ++i)
+                	for (unsigned int i = 0; i < interface_dofs_local[side].size(); ++i)
                 	{
-							if (interface_dofs[side][i]<n_stress)
-//                		if (true)
+							if (interface_dofs_local[side][i]<n_stress)
+							{
+								if (solver_flag ==0) //monolithic-Elascitiy part (coupled)
 								{
 								r[side][i] = -(get_normal_direction(side) *
-											   solution_bar[interface_dofs[side][i]])
-											   - get_normal_direction(side) *solution_star[interface_dofs[side][i]] ;
+											   solution_bar_local[interface_dofs_local[side][i]]);
 
 								r_b[side][i] = -(get_normal_direction(side) *
-																			   solution_bar[interface_dofs[side][i]]);
+																			   solution_bar_local[interface_dofs_local[side][i]]);
 								}
+								else if (solver_flag ==1) //only Elasticity part
+								{
+									r[side][i] = (get_normal_direction(side) *
+												   solution_bar_local[interface_dofs_local[side][i]]);
+
+									r_b[side][i] = (get_normal_direction(side) *
+																				   solution_bar_local[interface_dofs_local[side][i]]);
+								}
+							}
 							else
 							{
-//								r[side][i] = prm.time_step*get_normal_direction(side) *
-//											   solution_bar[interface_dofs[side][i]]
-//															- prm.time_step* get_normal_direction(side) *solution_star[interface_dofs[side][i]] ;
-								r[side][i] = get_normal_direction(side) *
-											   solution_bar[interface_dofs[side][i]]
-															-get_normal_direction(side) *solution_star[interface_dofs[side][i]] ;
+								if (solver_flag == 0) //monolithic-darcy part (coupled)
+								{
+									r[side][i] = get_normal_direction(side) * solution_bar_local[interface_dofs_local[side][i]]
+																-get_normal_direction(side) *solution_star[interface_dofs_local[side][i]] ;
 
-//								r_b[side][i] = prm.time_step*get_normal_direction(side) *
-//																			   solution_bar[interface_dofs[side][i]];
 
-								r_b[side][i] = get_normal_direction(side)*solution_bar[interface_dofs[side][i]];
+									r_b[side][i] = get_normal_direction(side)*solution_bar_local[interface_dofs_local[side][i]];
+
+								}
+								else if (solver_flag == 2) //only Darcy solve
+								{
+									r[side][i] = get_normal_direction(side) * solution_bar_local[interface_dofs_local[side][i]-n_Elast];
+
+									r_b[side][i] = get_normal_direction(side)*solution_bar_local[interface_dofs_local[side][i]-n_Elast];
+
+								}
 
 
 							}
@@ -2480,7 +2556,7 @@ template <int dim>
 						 mpi_communicator,
 						 &mpi_status);
 
-                for (unsigned int i = 0; i < interface_dofs[side].size(); ++i)
+                for (unsigned int i = 0; i < interface_dofs_local[side].size(); ++i)
                   {
                     r[side][i] += r_receive_buffer[i];
                     r_b[side][i] += r_b_receive_buffer[i];
@@ -2524,7 +2600,7 @@ template <int dim>
           //Making the first element of matrix Q[side] same as r_side[side/r_norm
           for(unsigned int side=0; side<n_faces_per_cell;++side)
              	  if (neighbors[side] >= 0){
-             		  for (unsigned int i = 0; i < interface_dofs[side].size(); ++i)
+             		  for (unsigned int i = 0; i < interface_dofs_local[side].size(); ++i)
                                    q[side][i]= r[side][i]/r_norm ;
              		 //adding q[side] as first element of Q[side]
 //             		  Q_side[side].push_back(q[side]);
@@ -2560,7 +2636,7 @@ template <int dim>
         		  H.resize(temp_array_size,Beta);
         		  for(unsigned int side=0; side<n_faces_per_cell;++side)
         		               	  if (neighbors[side] >= 0){
-        		               		  std::vector<double> tmp_vector(interface_dofs[side].size());
+        		               		  std::vector<double> tmp_vector(interface_dofs_local[side].size());
         		               		  Q_side[side].resize(temp_array_size+1,tmp_vector);
         		               	  }
         	  }// END OF resizng vectors and arrays
@@ -2574,17 +2650,16 @@ template <int dim>
             	  if (neighbors[side] >= 0)
             		  interface_data[side]=Q_side[side][k_counter];
 
-
               if (mortar_flag == 1)
               {
                   for (unsigned int side=0;side<n_faces_per_cell;++side)
-                      for (unsigned int i=0;i<interface_dofs[side].size();++i)
-                          interface_fe_function_mortar[interface_dofs[side][i]] = interface_data[side][i];
+                      for (unsigned int i=0;i<interface_dofs_local[side].size();++i)
+                          interface_fe_function_mortar[interface_dofs_local[side][i]] = interface_data[side][i];
 
                   project_mortar(P_coarse2fine, dof_handler_mortar,
                                  interface_fe_function_mortar,
                                  quad,
-                                 constraints,
+                                 constraints_local,
                                  neighbors,
                                  dof_handler,
                                  interface_fe_function);
@@ -2600,13 +2675,15 @@ template <int dim>
 
                   assemble_rhs_star(fe_face_values);
                   solve_star();
+                  solution_star_local.reinit(solution_star);
+				  solution_star_local = solution_star;
               }
               else if (mortar_flag == 2)
               {
                   solution_star_mortar = 0;
                   unsigned int j=0;
                   for (unsigned int side=0; side<n_faces_per_cell; ++side)
-                      for (unsigned int i=0;i<interface_dofs[side].size();++i)
+                      for (unsigned int i=0;i<interface_dofs_local[side].size();++i)
                       {
 
 //                          solution_star_mortar.sadd(1.0, interface_data[side][i], multiscale_basis[j]);
@@ -2619,12 +2696,33 @@ template <int dim>
               else
               {
                   for (unsigned int side=0; side<n_faces_per_cell; ++side)
-                      for (unsigned int i=0; i<interface_dofs[side].size(); ++i)
-                          interface_fe_function[interface_dofs[side][i]] = interface_data[side][i];
+                      for (unsigned int i=0; i<interface_dofs_local[side].size(); ++i)
+                          interface_fe_function[interface_dofs_local[side][i]] = interface_data[side][i];
 
                   interface_fe_function.block(2) = 0;
-                  assemble_rhs_star(fe_face_values);
-                  solve_star();
+
+                  if (solver_flag == 0)
+                  {
+                	  assemble_rhs_star(fe_face_values);
+                	  solve_star();
+                	  solution_star_local.reinit(solution_star);
+                	  solution_star_local = solution_star;
+                  }
+                  else if (solver_flag == 1)
+                  {
+                	  assemble_rhs_star_elast(fe_face_values);
+					  solve_star_elast();
+					  solution_star_local.reinit(solution_star_elast);
+					  solution_star_local = solution_star_elast;
+                  }
+                  else if (solver_flag ==2)
+                  {
+                	  assemble_rhs_star_darcy(fe_face_values);
+					  solve_star_darcy();
+					  solution_star_local.reinit(solution_star_darcy);
+					  solution_star_local = solution_star_darcy;
+                  }
+
               }
 
 
@@ -2634,15 +2732,15 @@ template <int dim>
               if (mortar_flag == 1){
                         project_mortar(P_fine2coarse,
                                        dof_handler,
-                                       solution_star,
+                                       solution_star_local,
                                        quad,
-                                       constraints,
+                                       constraints_local,
                                        neighbors,
                                        dof_handler_mortar,
                                        solution_star_mortar);
 //            	  project_mortar(P_fine2coarse,
 //            	                                         dof_handler,
-//            	                                         solution_star,
+//            	                                         solution_star_local,
 //            	                                         quad,
 //            	                                         constraints,
 //            	                                         neighbors,
@@ -2650,7 +2748,6 @@ template <int dim>
 //            	                                         solution_star_mortar);
 
               }
-
               //defing q  to push_back to Q (Arnoldi algorithm)
               //defing h  to push_back to H (Arnoldi algorithm)
               std::vector<double> h(k_counter+2,0);
@@ -2667,34 +2764,45 @@ template <int dim>
                     	for (unsigned int i=0; i<interface_dofs[side].size(); ++i)
 							if (interface_dofs[side][i] < n_stress_mortar)
 							{
-								interface_data_send[side][i] = get_normal_direction(side) * solution_star_mortar[interface_dofs[side][i]];
+								interface_data_send[side][i] = get_normal_direction(side) * solution_star_mortar[interface_dofs_local[side][i]];
 							}
 							else
 							{
-//                        		interface_data_send[side][i] = -prm.time_step * get_normal_direction(side) * solution_star[interface_dofs[side][i]];
-								interface_data_send[side][i] = - get_normal_direction(side) * solution_star_mortar[interface_dofs[side][i]];
+//                        		interface_data_send[side][i] = -prm.time_step * get_normal_direction(side) * solution_star_local[interface_dofs_local[side][i]];
+								interface_data_send[side][i] = - get_normal_direction(side) * solution_star_mortar[interface_dofs_local[side][i]];
 							}
                     else
-                        for (unsigned int i=0; i<interface_dofs[side].size(); ++i)
-//                            interface_data_send[side][i] = get_normal_direction(side) * solution_star[interface_dofs[side][i]];
-                        	if (interface_dofs[side][i] < n_stress)
-							{
-								interface_data_send[side][i] = get_normal_direction(side) * solution_star[interface_dofs[side][i]];
-							}
+                        for (unsigned int i=0; i<interface_dofs_local[side].size(); ++i)
+                        	if (interface_dofs_local[side][i] < n_stress)
+                        	{
+                        		if (solver_flag ==0) //monolithic-Elastic  coupled part
+                        		{
+                        			interface_data_send[side][i] = get_normal_direction(side) * solution_star_local[interface_dofs_local[side][i]];
+                        		}
+                        		else if (solver_flag ==1) //Elast-only part
+                        		{
+                        			interface_data_send[side][i] = -(get_normal_direction(side) * solution_star_local[interface_dofs_local[side][i]]);
+                        		}
+                        	}
 							else
 							{
-//                        		interface_data_send[side][i] = -prm.time_step * get_normal_direction(side) * solution_star[interface_dofs[side][i]];
-								interface_data_send[side][i] = - get_normal_direction(side) * solution_star[interface_dofs[side][i]];
+								if (solver_flag == 0) //monolithic-Darcy coupled part
+								{
+									interface_data_send[side][i] = - get_normal_direction(side) * solution_star_local[interface_dofs_local[side][i]];
+								}
+								else if (solver_flag ==2) //Darcy-only part
+								{
+									interface_data_send[side][i] = - get_normal_direction(side) * solution_star_local[interface_dofs_local[side][i]-n_Elast];
+								}
 							}
-
                     MPI_Send(&interface_data_send[side][0],
-                             interface_dofs[side].size(),
+                             interface_dofs_local[side].size(),
                              MPI_DOUBLE,
                              neighbors[side],
                              this_mpi,
                              mpi_communicator);
                     MPI_Recv(&interface_data_receive[side][0],
-                             interface_dofs[side].size(),
+                             interface_dofs_local[side].size(),
                              MPI_DOUBLE,
                              neighbors[side],
                              neighbors[side],
@@ -2702,7 +2810,7 @@ template <int dim>
                              &mpi_status);
 
                     // Compute Ap and with it compute alpha
-                    for (unsigned int i = 0; i < interface_dofs[side].size(); ++i)
+                    for (unsigned int i = 0; i < interface_dofs_local[side].size(); ++i)
                       {
                         Ap[side][i] = (interface_data_send[side][i] +
                                         interface_data_receive[side][i]);
@@ -2815,8 +2923,8 @@ template <int dim>
               for (unsigned int side = 0; side < n_faces_per_cell; ++side)
                 {
 
-                  interface_data_receive[side].resize(interface_dofs[side].size(), 0);
-                  interface_data_send[side].resize(interface_dofs[side].size(), 0);
+                  interface_data_receive[side].resize(interface_dofs_local[side].size(), 0);
+                  interface_data_send[side].resize(interface_dofs_local[side].size(), 0);
 
 
                 }
@@ -2843,14 +2951,14 @@ template <int dim>
                  {
                      interface_data = lambda;
                      for (unsigned int side=0;side<n_faces_per_cell;++side)
-                         for (unsigned int i=0;i<interface_dofs[side].size();++i)
-                             interface_fe_function_mortar[interface_dofs[side][i]] = interface_data[side][i];
+                         for (unsigned int i=0;i<interface_dofs_local[side].size();++i)
+                             interface_fe_function_mortar[interface_dofs_local[side][i]] = interface_data[side][i];
 
                      project_mortar(P_coarse2fine,
                                     dof_handler_mortar,
                                     interface_fe_function_mortar,
                                     quad,
-                                    constraints,
+                                    constraints_local,
                                     neighbors,
                                     dof_handler,
                                     interface_fe_function);
@@ -2868,21 +2976,46 @@ template <int dim>
                  {
                      interface_data = lambda;
                      for (unsigned int side=0; side<n_faces_per_cell; ++side)
-                         for (unsigned int i=0; i<interface_dofs[side].size(); ++i)
-                             interface_fe_function[interface_dofs[side][i]] = interface_data[side][i];
+                         for (unsigned int i=0; i<interface_dofs_local[side].size(); ++i)
+                             interface_fe_function[interface_dofs_local[side][i]] = interface_data[side][i];
                  }
 
 
-          assemble_rhs_star(fe_face_values);
-          solve_star();
-          solution.reinit(solution_bar);
-          solution = solution_bar;
-          solution.sadd(1.0, solution_star);
-
-          solution_star.sadd(1.0, solution_bar);
-          pcout<<"finished local_gmres"<<"\n";
-
-
+          if (solver_flag == 0) //monolithic scheme: putting solution back together
+          {
+        	  assemble_rhs_star(fe_face_values);
+        	  solve_star();
+        	  solution.reinit(solution_bar_local);
+		   	  solution = solution_bar_local;
+			  solution.sadd(1.0, solution_star);
+			  solution_star.sadd(1.0, solution_bar_local);
+			  pcout<<"finished local_gmres for monolithic scheme"<<"\n";
+          }
+          else if (solver_flag == 1) //Elasticity part: putting solution back together
+          {
+        	  assemble_rhs_star_elast(fe_face_values);
+        	  solve_star_elast();
+        	  solution_elast.reinit(solution_bar_elast);
+			  solution_elast = solution_bar_elast;
+			  solution_elast.sadd(1.0, solution_star_elast);
+			  solution_star_elast.sadd(1.0, solution_bar_elast);
+			  solution.block(0)=solution_elast.block(0);
+			  solution.block(1)=solution_elast.block(1);
+			  solution.block(2)=solution_elast.block(2);
+			  pcout<<"finished local_gmres for Elasticity scheme"<<"\n";
+          }
+          else if (solver_flag == 2) // Darcy part: putting solution back together
+          {
+        	  assemble_rhs_star_darcy(fe_face_values);
+        	  solve_star_darcy();
+        	  solution_darcy.reinit(solution_bar_darcy);
+			  solution_darcy = solution_bar_darcy;
+			  solution_darcy.sadd(1.0, solution_star_darcy);
+			  solution_star_darcy.sadd(1.0, solution_bar_darcy);
+			  solution.block(3)=solution_darcy.block(0);
+			  solution.block(4)=solution_darcy.block(1);
+			  pcout<<"finished local_gmres for Darcy scheme"<<"\n";
+          }
         }
 
 
@@ -2901,9 +3034,6 @@ template <int dim>
 //    		TimerOutput::Scope t(computing_timer, "Local CG Darcy");
     	TimerOutput::Scope t(computing_timer, "Local CG ");
 
-
-      double local_cg_tolerance(tolerance * (1.e-10));
-//    	 double local_cg_tolerance(1.e-20);
 
 
       const unsigned int this_mpi =
@@ -2940,9 +3070,9 @@ template <int dim>
       quad = QGauss<dim - 1>(qdegree);
 
 
-      ConstraintMatrix  constraints;
-      constraints.clear();
-      constraints.close();
+      ConstraintMatrix  constraints_local;
+      constraints_local.clear();
+      constraints_local.close();
       FEFaceValues<dim> fe_face_values(fe,
                                        quad,
                                        update_values | update_normal_vectors |
@@ -3233,10 +3363,10 @@ template <int dim>
               }
           if(split_order_flag==0){
           pcout << "\r  ..." << cg_iteration
-                << " Elast iterations completed, (Elast residual = " << fabs(alpha[0])
+                << " Elast iterations completed, (Elast residual = " << sqrt(fabs(alpha[0]) / normB)
                 << ")..." << std::flush;
           // Exit criterion
-          if (fabs(alpha[0]) / normB < local_cg_tolerance )
+          if (sqrt(fabs(alpha[0]) / normB) < tolerance )
 //          if (sqrt(alpha[0]/normB<1.e-8) )
             {
               pcout << "\n  Elast CG converges in " << cg_iteration << " iterations!\n";
@@ -3246,11 +3376,11 @@ template <int dim>
             }
           }
           else if(split_order_flag==1){
-//                   pcout << "\r  ..." << cg_iteration
-//                         << " Darcy iterations completed, (Darcy residual = " << fabs(alpha[0])
-//                         << ")..." << std::flush;
+                   pcout << "\r  ..." << cg_iteration
+                         << " Darcy iterations completed, (Darcy residual = " << sqrt(fabs(alpha[0]) / normB)
+                         << ")..." << std::flush;
                    // Exit criterion
-                   if (fabs(alpha[0]) / normB < local_cg_tolerance )
+                   if (sqrt(fabs(alpha[0]) / normB)< tolerance )
 //        	  if (sqrt(alpha[0]/normB<1.e-8) )
                      {
                        pcout << "\n  Darcy CG converges in " << cg_iteration << " iterations!\n";
@@ -4036,7 +4166,7 @@ template <int dim>
 //        convergence_table.add_value("Velocity,L2-Hdiv", recv_buf_num[1]);
         convergence_table.add_value("Velocity,L8-L2", recv_buf_num[1]);
 //        convergence_table.add_value("DivVelocity,L8-L2", recv_buf_num[0]);
-        convergence_table.add_value("Velocity,L2-Hdiv", recv_buf_num[6]);
+        convergence_table.add_value("DivVelocity,L2-L2", recv_buf_num[6]);
 
 //        convergence_table.add_value("Pressure,L2-L2", recv_buf_num[2]);
 //        convergence_table.add_value("Pressure,L2-L2mid", recv_buf_num[3]);
@@ -4176,14 +4306,14 @@ template <int dim>
       if (Utilities::MPI::this_mpi_process(mpi_communicator) == 0 && cycle == refine-1 && std::abs(prm.time-total_time)<1.0e-12){
     	  convergence_table.set_precision("Velocity,L8-L2", 2);
 //    	  convergence_table.set_precision("DivVelocity,L8-L2", 2);
-        convergence_table.set_precision("Velocity,L2-Hdiv", 2);
+        convergence_table.set_precision("DivVelocity,L2-L2", 2);
 //        convergence_table.set_precision("Pressure,L2-L2", 3);
 //        convergence_table.set_precision("Pressure,L2-L2mid", 3);
         convergence_table.set_precision("Pressure,L8-L2", 2);
 
         convergence_table.set_scientific("Velocity,L8-L2", true);
 //        convergence_table.set_scientific("DivVelocity,L8-L2", true);
-        convergence_table.set_scientific("Velocity,L2-Hdiv", true);
+        convergence_table.set_scientific("DivVelocity,L2-L2", true);
 //        convergence_table.set_scientific("Pressure,L2-L2", true);
 //        convergence_table.set_scientific("Pressure,L2-L2mid", true);
         convergence_table.set_scientific("Pressure,L8-L2", true);
@@ -4218,7 +4348,7 @@ template <int dim>
 
         convergence_table.set_tex_caption("Velocity,L8-L2", "$ \\|z - z_h\\|_{L^{\\infty}(L^2)} $");
 //        convergence_table.set_tex_caption("DivVelocity,L8-L2", "$ \\|\\nabla\\cdot(z - z_h)\\|_{L^{\\infty}(L^2)} $");
-        convergence_table.set_tex_caption("Velocity,L2-Hdiv", "$ \\|\\nabla\\cdot(z - z_h)\\|_{L^2(L^2)} $");
+        convergence_table.set_tex_caption("DivVelocity,L2-L2", "$ \\|\\nabla\\cdot(z - z_h)\\|_{L^2(L^2)} $");
 //        convergence_table.set_tex_caption("Pressure,L2-L2", "$ \\|p - p_h\\|_{L^2(L^2)} $");
 //        convergence_table.set_tex_caption("Pressure,L2-L2mid", "$ \\|Qp - p_h\\|_{L^2(L^2)} $");
         convergence_table.set_tex_caption("Pressure,L8-L2", "$ \\|p - p_h\\|_{L^{\\infty}(L^2)} $");
@@ -4247,7 +4377,7 @@ template <int dim>
 //        }
         convergence_table.evaluate_convergence_rates("Velocity,L8-L2", ConvergenceTable::reduction_rate_log2);
 //        convergence_table.evaluate_convergence_rates("DivVelocity,L8-L2", ConvergenceTable::reduction_rate_log2);
-        convergence_table.evaluate_convergence_rates("Velocity,L2-Hdiv", ConvergenceTable::reduction_rate_log2);
+        convergence_table.evaluate_convergence_rates("DivVelocity,L2-L2", ConvergenceTable::reduction_rate_log2);
 //        convergence_table.evaluate_convergence_rates("Pressure,L2-L2", ConvergenceTable::reduction_rate_log2);
 //        convergence_table.evaluate_convergence_rates("Pressure,L2-L2mid", ConvergenceTable::reduction_rate_log2);
         convergence_table.evaluate_convergence_rates("Pressure,L8-L2", ConvergenceTable::reduction_rate_log2);
