@@ -1959,7 +1959,7 @@ template <int dim>
     			pcout << "\nStarting GMRES iterations, time t=" << prm.time << "s..." << "\n";
     			assemble_rhs_bar ();
     	//        local_cg(maxiter);
-    			local_gmres (maxiter, o); //gmres for monolithic scheme
+    			local_gmres (maxiter, 0); //gmres for monolithic scheme
 
     			if (cg_iteration > max_cg_iteration)
     			  max_cg_iteration = cg_iteration;
@@ -2627,7 +2627,6 @@ template <int dim>
             	  if (neighbors[side] >= 0)
             		  interface_data[side]=Q_side[side][k_counter];
 
-
               if (mortar_flag == 1)
               {
                   for (unsigned int side=0;side<n_faces_per_cell;++side)
@@ -2653,6 +2652,8 @@ template <int dim>
 
                   assemble_rhs_star(fe_face_values);
                   solve_star();
+                  solution_star_local.reinit(solution_star);
+				  solution_star_local = solution_star;
               }
               else if (mortar_flag == 2)
               {
@@ -2724,7 +2725,6 @@ template <int dim>
 //            	                                         solution_star_mortar);
 
               }
-
               //defing q  to push_back to Q (Arnoldi algorithm)
               //defing h  to push_back to H (Arnoldi algorithm)
               std::vector<double> h(k_counter+2,0);
@@ -2772,7 +2772,6 @@ template <int dim>
 									interface_data_send[side][i] = - get_normal_direction(side) * solution_star_local[interface_dofs_local[side][i]-n_Elast];
 								}
 							}
-
                     MPI_Send(&interface_data_send[side][0],
                              interface_dofs_local[side].size(),
                              MPI_DOUBLE,
@@ -4063,7 +4062,7 @@ template <int dim>
 //        convergence_table.add_value("Velocity,L2-Hdiv", recv_buf_num[1]);
         convergence_table.add_value("Velocity,L8-L2", recv_buf_num[1]);
 //        convergence_table.add_value("DivVelocity,L8-L2", recv_buf_num[0]);
-        convergence_table.add_value("Velocity,L2-Hdiv", recv_buf_num[6]);
+        convergence_table.add_value("DivVelocity,L2-L2", recv_buf_num[6]);
 
 //        convergence_table.add_value("Pressure,L2-L2", recv_buf_num[2]);
 //        convergence_table.add_value("Pressure,L2-L2mid", recv_buf_num[3]);
@@ -4197,14 +4196,14 @@ template <int dim>
       if (Utilities::MPI::this_mpi_process(mpi_communicator) == 0 && cycle == refine-1 && std::abs(prm.time-total_time)<1.0e-12){
     	  convergence_table.set_precision("Velocity,L8-L2", 2);
 //    	  convergence_table.set_precision("DivVelocity,L8-L2", 2);
-        convergence_table.set_precision("Velocity,L2-Hdiv", 2);
+        convergence_table.set_precision("DivVelocity,L2-L2", 2);
 //        convergence_table.set_precision("Pressure,L2-L2", 3);
 //        convergence_table.set_precision("Pressure,L2-L2mid", 3);
         convergence_table.set_precision("Pressure,L8-L2", 2);
 
         convergence_table.set_scientific("Velocity,L8-L2", true);
 //        convergence_table.set_scientific("DivVelocity,L8-L2", true);
-        convergence_table.set_scientific("Velocity,L2-Hdiv", true);
+        convergence_table.set_scientific("DivVelocity,L2-L2", true);
 //        convergence_table.set_scientific("Pressure,L2-L2", true);
 //        convergence_table.set_scientific("Pressure,L2-L2mid", true);
         convergence_table.set_scientific("Pressure,L8-L2", true);
@@ -4239,7 +4238,7 @@ template <int dim>
 
         convergence_table.set_tex_caption("Velocity,L8-L2", "$ \\|z - z_h\\|_{L^{\\infty}(L^2)} $");
 //        convergence_table.set_tex_caption("DivVelocity,L8-L2", "$ \\|\\nabla\\cdot(z - z_h)\\|_{L^{\\infty}(L^2)} $");
-        convergence_table.set_tex_caption("Velocity,L2-Hdiv", "$ \\|\\nabla\\cdot(\\u - \\u_h)\\|_{L^2(L^2)} $");
+        convergence_table.set_tex_caption("DivVelocity,L2-L2", "$ \\|\\nabla\\cdot(z - z_h)\\|_{L^2(L^2)} $");
 //        convergence_table.set_tex_caption("Pressure,L2-L2", "$ \\|p - p_h\\|_{L^2(L^2)} $");
 //        convergence_table.set_tex_caption("Pressure,L2-L2mid", "$ \\|Qp - p_h\\|_{L^2(L^2)} $");
         convergence_table.set_tex_caption("Pressure,L8-L2", "$ \\|p - p_h\\|_{L^{\\infty}(L^2)} $");
@@ -4268,7 +4267,7 @@ template <int dim>
 //        }
         convergence_table.evaluate_convergence_rates("Velocity,L8-L2", ConvergenceTable::reduction_rate_log2);
 //        convergence_table.evaluate_convergence_rates("DivVelocity,L8-L2", ConvergenceTable::reduction_rate_log2);
-        convergence_table.evaluate_convergence_rates("Velocity,L2-Hdiv", ConvergenceTable::reduction_rate_log2);
+        convergence_table.evaluate_convergence_rates("DivVelocity,L2-L2", ConvergenceTable::reduction_rate_log2);
 //        convergence_table.evaluate_convergence_rates("Pressure,L2-L2", ConvergenceTable::reduction_rate_log2);
 //        convergence_table.evaluate_convergence_rates("Pressure,L2-L2mid", ConvergenceTable::reduction_rate_log2);
         convergence_table.evaluate_convergence_rates("Pressure,L8-L2", ConvergenceTable::reduction_rate_log2);
