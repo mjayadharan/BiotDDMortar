@@ -28,7 +28,7 @@ int main (int argc, char *argv[])
         mesh_m2d[2] = {3,3};
         mesh_m2d[3] = {2,2};
         mesh_m2d[4] = {1,1};
-        double c0=1;
+        double c0=0.1;
         double alpha=1;
         int num_cycle=4;
         int max_itr=500;
