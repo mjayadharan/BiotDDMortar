@@ -4492,7 +4492,7 @@ template <int dim>
                     get_subdomain_coordinates_spe<dim>(this_mpi, p1, p2);
 
                     if (mortar_flag)
-                        GridGenerator::subdivided_hyper_rectangle(triangulation, reps[this_mpi], p1, p2);
+                        GridGenerator::subdivided_hyper_rectangle(triangulation, reps[0], p1, p2);
                     else
                     {
                         GridGenerator::subdivided_hyper_rectangle(triangulation, reps[0], p1, p2);
@@ -4503,7 +4503,7 @@ template <int dim>
 
                     if (mortar_flag)
                     {
-                        GridGenerator::subdivided_hyper_rectangle(triangulation_mortar, reps[n_processes], p1, p2);
+                        GridGenerator::subdivided_hyper_rectangle(triangulation_mortar, reps[4], p1, p2);
                         pcout << "Mortar mesh has " << triangulation_mortar.n_active_cells() << " cells" << std::endl;
 //                        if (true) //to be disable after single run
 //							for (int i=0; i<3; i++)
