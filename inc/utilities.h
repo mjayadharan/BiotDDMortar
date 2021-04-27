@@ -171,6 +171,21 @@ namespace dd_biot
         }
     }
 
+    //Computing Compute the lower left and upper right coordinates for special case of 3x5 subdomains (SPE case)
+    template<int dim>
+    void get_subdomain_coordinates_spe (const unsigned int &this_mpi, Point<dim> &p1, Point<dim> &p2)
+    {
+    	//Lower left coordinate
+    	p1[0] = (this_mpi%3)*20;
+    	p1[1] = (this_mpi/3)*44;
+    	//Upper right coordinate
+    	p2[0] = (this_mpi%3 +1)*20;
+		p2[1] = (this_mpi/3 +1)*44;
+
+    }
+
+
+
     // Find neighboring subdomains
     void
     find_neighbors (const int &dim, const unsigned int &this_mpi, const std::vector<unsigned int> &n_doms, std::vector<int> &neighbors)

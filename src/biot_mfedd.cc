@@ -4479,13 +4479,17 @@ template <int dim>
                 {
                     // Partitioning into subdomains (simple bricks)
                     find_divisors<dim>(n_processes, n_domains);
+                    //manually making the partition of subdomains 3x5
+                    n_domains[0] = 3;
+                    n_domains[1] = 5;
 
                     // Dimensions of the domain (unit hypercube)
                     std::vector<double> subdomain_dimensions(dim);
                     for (unsigned int d=0; d<dim; ++d)
                         subdomain_dimensions[d] = 1.0/double(n_domains[d]);
 
-                    get_subdomain_coordinates(this_mpi, n_domains, subdomain_dimensions, p1, p2);
+//                    get_subdomain_coordinates(this_mpi, n_domains, subdomain_dimensions, p1, p2);
+                    get_subdomain_coordinates_spe<dim>(this_mpi, p1, p2);
 
                     if (mortar_flag)
                         GridGenerator::subdivided_hyper_rectangle(triangulation, reps[this_mpi], p1, p2);
