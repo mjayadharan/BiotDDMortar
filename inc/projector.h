@@ -20,7 +20,8 @@
 #include <deal.II/dofs/dof_tools.h>
 #include <deal.II/fe/mapping.h>
 #include <deal.II/fe/mapping_q1.h>
-#include <deal.II/lac/constraint_matrix.h>
+//#include <deal.II/lac/constraint_matrix.h>
+#include <deal.II/lac/affine_constraints.h>
 #include <deal.II/lac/sparse_direct.h>
 
 
@@ -30,7 +31,7 @@
 namespace Projector
 {
     using namespace dealii;
-
+//    using ConstraintMatrix = class dealii::AffineConstraints<double>;
     struct Scratch {
         Scratch() = default;
     };
@@ -665,7 +666,7 @@ namespace Projector
                 (const DoFHandler<dim,spacedim>                                       &dof,
                  const std::map<types::boundary_id, const Function<spacedim,number>*> &boundary_functions,
                  const Quadrature<dim-1>                                              &q,
-                 ConstraintMatrix                                                     &constraints,
+				 dealii::AffineConstraints<double>                                    &constraints,
                  std::vector<unsigned int>                                             component_mapping = std::vector<unsigned int>());
 
         void reset()
@@ -822,7 +823,7 @@ namespace Projector
             (const DoFHandler<dim,spacedim>                                       &dof,
              const std::map<types::boundary_id, const Function<spacedim,number>*> &boundary_functions,
              const Quadrature<dim-1>                                              &q,
-             ConstraintMatrix                                                     &constraints,
+			 dealii::AffineConstraints<double>                                    &constraints,
              std::vector<unsigned int>                                             component_mapping)
     {
         std::map<types::global_dof_index,number> boundary_values;

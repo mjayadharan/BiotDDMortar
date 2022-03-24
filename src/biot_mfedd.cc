@@ -2116,7 +2116,7 @@ template <int dim>
     void MixedBiotProblemDD<dim>::compute_multiscale_basis ()
     {
         TimerOutput::Scope t(computing_timer, "Compute multiscale basis");
-        ConstraintMatrix constraints_local;
+        dealii::AffineConstraints<double> constraints_local;
         QGauss<dim-1> quad(qdegree);
         FEFaceValues<dim> fe_face_values (fe, quad,
                                           update_values    | update_normal_vectors |
@@ -2314,7 +2314,7 @@ template <int dim>
           quad = QGauss<dim - 1>(qdegree);
 
 
-          ConstraintMatrix  constraints_local;
+          dealii::AffineConstraints<double>  constraints_local;
           constraints_local.clear();
           constraints_local.close();
           FEFaceValues<dim> fe_face_values(fe,
@@ -3070,7 +3070,7 @@ template <int dim>
       quad = QGauss<dim - 1>(qdegree);
 
 
-      ConstraintMatrix  constraints_local;
+      dealii::AffineConstraints<double>  constraints_local;
       constraints_local.clear();
       constraints_local.close();
       FEFaceValues<dim> fe_face_values(fe,
@@ -3604,7 +3604,7 @@ template <int dim>
 			A_direct_non_diff.vmult (solution_star, system_rhs_star);
         }
 //        // Project the solution to the mortar space
-//        ConstraintMatrix constraints;
+//        dealii::AffineConstraints<double> constraints;
 //        constraints.clear();
 //        constraints.close();
 //        project_mortar(P_fine2coarse, dof_handler, solution_star, project_quad, constraints, neighbors, dof_handler_mortar, solution_star_mortar);
@@ -4551,7 +4551,7 @@ template <int dim>
                 {
                   InitialCondition<dim> ic;
 
-                  ConstraintMatrix constraints;
+                  dealii::AffineConstraints<double> constraints;
                   constraints.close();
                   VectorTools::project (dof_handler,
                                         constraints,
