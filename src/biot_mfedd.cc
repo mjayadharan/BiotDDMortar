@@ -189,10 +189,11 @@ namespace dd_biot
             DoFRenumbering::component_wise (dof_handler_mortar);
         }
 
-        std::vector<types::global_dof_index> dofs_per_component (dim*dim + dim + 0.5*dim*(dim-1) + dim + 1);
-        DoFTools::count_dofs_per_component (dof_handler, dofs_per_component);
+//        std::vector<types::global_dof_index> dofs_per_component (dim*dim + dim + 0.5*dim*(dim-1) + dim + 1);
+//        DoFTools::count_dofs_per_component (dof_handler, dofs_per_component);
         unsigned int n_s=0, n_u=0, n_g=0, n_z = 0, n_p = 0;
-
+        std::vector<types::global_dof_index> dofs_per_component =
+                DoFTools::count_dofs_per_fe_component (dof_handler);
         for (unsigned int i=0; i<dim; ++i)
         {
             n_s += dofs_per_component[i*dim];
@@ -300,8 +301,10 @@ namespace dd_biot
 			//adding vectors required for storing mortar solutions.
 			if (mortar_flag)
 			        {
-			            std::vector<types::global_dof_index> dofs_per_component_mortar (dim*dim + dim + 0.5*dim*(dim-1) + dim + 1);
-			            DoFTools::count_dofs_per_component (dof_handler_mortar, dofs_per_component_mortar);
+//			            std::vector<types::global_dof_index> dofs_per_component_mortar (dim*dim + dim + 0.5*dim*(dim-1) + dim + 1);
+//			            DoFTools::count_dofs_per_component (dof_handler_mortar, dofs_per_component_mortar);
+                        std::vector<types::global_dof_index> dofs_per_component_mortar =
+                                DoFTools::count_dofs_per_fe_component (dof_handler_mortar);
 			            unsigned int n_s_mortar=0, n_u_mortar=0, n_g_mortar=0, n_z_mortar=0, n_p_mortar=0;
 
 			            for (unsigned int i=0; i<dim; ++i)
@@ -3817,7 +3820,7 @@ template <int dim>
       Vector<double> cellwise_div_norms (triangulation.n_active_cells());
 
       // Define quadrature points to compute errors at
-      QTrapez<1>      q_trapez;
+      QTrapezoid<1>      q_trapez;
       QIterated<dim>  quadrature(q_trapez,degree+2);
       QGauss<dim>  quadrature_div(5);
 
@@ -4182,12 +4185,12 @@ template <int dim>
 //          convergence_table.add_value("Lambda,Darcy", recv_buf_num[12]/recv_buf_den[12]);
          	convergence_table.add_value("Lambda,Elast", recv_buf_num[11]);
 	    	  convergence_table.add_value("Lambda,Darcy", recv_buf_num[12]);
-//          if(split_flag==0)
-//          {
-//        	double combined_l_int_error =(pow(recv_buf_num[11],2) + pow(recv_buf_num[12],2))/(pow(recv_buf_den[11],2) + pow(recv_buf_den[12],2));
-//        	combined_l_int_error = sqrt(combined_l_int_error);
-//        	convergence_table.add_value("Lambda,Biot", combined_l_int_error);
-//          }
+          if(split_flag==0)
+          {
+        	double combined_l_int_error =(pow(recv_buf_num[11],2) + pow(recv_buf_num[12],2))/(pow(recv_buf_den[11],2) + pow(recv_buf_den[12],2));
+        	combined_l_int_error = sqrt(combined_l_int_error);
+        	convergence_table.add_value("Lambda,Biot", combined_l_int_error);
+          }
         }
       }
     }

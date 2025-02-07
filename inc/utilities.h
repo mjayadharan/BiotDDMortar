@@ -412,7 +412,8 @@ namespace dd_biot
     {
         out_vec = 0;
 
-        Functions::FEFieldFunction<dim, DoFHandler<dim>, BlockVector<double>> fe_interface_data (dof1, in_vec);
+//        Functions::FEFieldFunction<dim, DoFHandler<dim>, BlockVector<double>> fe_interface_data (dof1, in_vec);
+        Functions::FEFieldFunction<dim, BlockVector<double>> fe_interface_data (dof1, in_vec);
         std::map<types::global_dof_index,double> boundary_values_velocity;
 
         std::map<types::boundary_id, const Function<dim, double> *> boundary_functions_velocity;
